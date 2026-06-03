@@ -1,0 +1,213 @@
+{
+    "users": [
+        {
+            "name": "Web Admin",
+            "email": "webadmin@lms.local",
+            "status": "Administrator",
+            "preferences": {
+                "autoLogin": true,
+                "notifications": true
+            },
+            "passwordHash": "e86f78a8a3caf0b60d8e74e5942aa6d86dc150cd3c03338aef25b7d2d7e3acc7",
+            "createdAt": "2026-06-02T18:33:41.376Z",
+            "lastSignedIn": "2026-06-02T18:33:41.376Z",
+            "enrolledClasses": [],
+            "taughtClasses": [
+                {
+                    "id": "class_admin_math_001",
+                    "name": "Advanced Mathematics",
+                    "subject": "Mathematics",
+                    "students": [
+                        "mare.l@test.com",
+                        "guess.m@local.lms"
+                    ],
+                    "pendingRequests": [],
+                    "createdAt": "2024-01-01T00:00:00.000Z"
+                },
+                {
+                    "id": "class_admin_science_001",
+                    "name": "Physics Fundamentals",
+                    "subject": "Physics",
+                    "students": [
+                        "mare.l@test.com",
+                        "guess.m@local.lms"
+                    ],
+                    "pendingRequests": [],
+                    "createdAt": "2024-01-01T00:00:00.000Z"
+                }
+            ]
+        },
+        {
+            "name": "Teacher One",
+            "email": "teacher@lms.local",
+            "status": "Teacher",
+            "preferences": {
+                "autoLogin": true,
+                "notifications": true
+            },
+            "passwordHash": "d041c3d3ca4ed64c5b54c5d807bd9a0bd2d6ae3609ecd2d06ac383db449360e1",
+            "createdAt": "2026-06-02T18:33:41.376Z",
+            "lastSignedIn": "2026-06-02T18:33:41.376Z",
+            "enrolledClasses": [],
+            "taughtClasses": [
+                {
+                    "id": "class_admin_math_001",
+                    "name": "Advanced Mathematics",
+                    "subject": "Mathematics",
+                    "students": [
+                        "mare.l@test.com",
+                        "guess.m@local.lms"
+                    ],
+                    "pendingRequests": [],
+                    "createdAt": "2024-01-01T00:00:00.000Z"
+                }
+            ]
+        },
+        {
+            "name": "Maren Luthor",
+            "email": "mare.l@test.com",
+            "status": "Student",
+            "preferences": {
+                "autoLogin": true,
+                "notifications": true
+            },
+            "passwordHash": "b2a1f4fd0a460606b34c8913e2981dac8d2e283d778aba586c416ee2629bfa54",
+            "createdAt": "2026-06-02T18:33:41.376Z",
+            "lastSignedIn": "2026-06-02T18:33:41.376Z",
+            "enrolledClasses": [
+                "class_admin_math_001",
+                "class_admin_science_001"
+            ],
+            "taughtClasses": []
+        },
+        {
+            "name": "Guess Me",
+            "email": "guess.m@local.lms",
+            "status": "Student",
+            "preferences": {
+                "autoLogin": true,
+                "notifications": true
+            },
+            "passwordHash": "b2a1f4fd0a460606b34c8913e2981dac8d2e283d778aba586c416ee2629bfa54",
+            "createdAt": "2026-06-02T18:33:41.376Z",
+            "lastSignedIn": "2026-06-02T18:33:41.376Z",
+            "enrolledClasses": [
+                "class_admin_math_001",
+                "class_admin_science_001"
+            ],
+            "taughtClasses": []
+        },
+        {
+            "name": "Test Student 1",
+            "email": "test.student.1@lms.local",
+            "status": "Student",
+            "preferences": {
+                "autoLogin": true,
+                "notifications": true
+            },
+            "passwordHash": "b2a1f4fd0a460606b34c8913e2981dac8d2e283d778aba586c416ee2629bfa54",
+            "createdAt": "2026-06-02T18:33:41.376Z",
+            "lastSignedIn": "2026-06-02T18:33:41.376Z",
+            "enrolledClasses": [],
+            "taughtClasses": []
+        },
+        {
+            "name": "Test Student 2",
+            "email": "test.student.2@lms.local",
+            "status": "Student",
+            "preferences": {
+                "autoLogin": true,
+                "notifications": true
+            },
+            "passwordHash": "b2a1f4fd0a460606b34c8913e2981dac8d2e283d778aba586c416ee2629bfa54",
+            "createdAt": "2026-06-02T18:33:41.376Z",
+            "lastSignedIn": "2026-06-02T18:33:41.376Z",
+            "enrolledClasses": [],
+            "taughtClasses": []
+        },
+        {
+            "name": "Test Student 3",
+            "email": "test.student.3@lms.local",
+            "status": "Student",
+            "preferences": {
+                "autoLogin": true,
+                "notifications": true
+            },
+            "passwordHash": "b2a1f4fd0a460606b34c8913e2981dac8d2e283d778aba586c416ee2629bfa54",
+            "createdAt": "2026-06-02T18:33:41.376Z",
+            "lastSignedIn": "2026-06-02T18:33:41.376Z",
+            "enrolledClasses": [],
+            "taughtClasses": []
+        },
+        {
+            "name": "Test Student 4",
+            "email": "test.student.4@lms.local",
+            "status": "Student",
+            "preferences": {
+                "autoLogin": true,
+                "notifications": true
+            },
+            "passwordHash": "b2a1f4fd0a460606b34c8913e2981dac8d2e283d778aba586c416ee2629bfa54",
+            "createdAt": "2026-06-02T18:33:41.376Z",
+            "lastSignedIn": "2026-06-02T18:33:41.376Z",
+            "enrolledClasses": [],
+            "taughtClasses": []
+        },
+        {
+            "name": "Test Student 5",
+            "email": "test.student.5@lms.local",
+            "status": "Student",
+            "preferences": {
+                "autoLogin": true,
+                "notifications": true
+            },
+            "passwordHash": "b2a1f4fd0a460606b34c8913e2981dac8d2e283d778aba586c416ee2629bfa54",
+            "createdAt": "2026-06-02T18:33:41.376Z",
+            "lastSignedIn": "2026-06-02T18:33:41.376Z",
+            "enrolledClasses": [],
+            "taughtClasses": []
+        },
+        {
+            "name": "Test Student 6",
+            "email": "test.student.6@lms.local",
+            "status": "Student",
+            "preferences": {
+                "autoLogin": true,
+                "notifications": true
+            },
+            "passwordHash": "b2a1f4fd0a460606b34c8913e2981dac8d2e283d778aba586c416ee2629bfa54",
+            "createdAt": "2026-06-02T18:33:41.376Z",
+            "lastSignedIn": "2026-06-02T18:33:41.376Z",
+            "enrolledClasses": [],
+            "taughtClasses": []
+        },
+        {
+            "name": "Test Student 7",
+            "email": "test.student.7@lms.local",
+            "status": "Student",
+            "preferences": {
+                "autoLogin": true,
+                "notifications": true
+            },
+            "passwordHash": "b2a1f4fd0a460606b34c8913e2981dac8d2e283d778aba586c416ee2629bfa54",
+            "createdAt": "2026-06-02T18:33:41.376Z",
+            "lastSignedIn": "2026-06-02T18:33:41.376Z",
+            "enrolledClasses": [],
+            "taughtClasses": []
+        },
+        {
+            "name": "Test Student 8",
+            "email": "test.student.8@lms.local",
+            "status": "Student",
+            "preferences": {
+                "autoLogin": true,
+                "notifications": true
+            },
+            "passwordHash": "b2a1f4fd0a460606b34c8913e2981dac8d2e283d778aba586c416ee2629bfa54",
+            "createdAt": "2026-06-02T18:33:41.376Z",
+            "lastSignedIn": "2026-06-02T18:33:41.376Z",
+            "enrolledClasses": [],
+            "taughtClasses": []
+        }
+    ]
+}

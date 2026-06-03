@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Belmont Academy LMS</title>
+  <link rel="stylesheet" href="/styles/main.css">
+</head>
+<body>
+
+<div id="intro-video-overlay" class="video-overlay">
+  <video id="intro-video" muted playsinline autoplay preload="auto" src="/Storage/Image_assets/Videos/VIC%20LMS.mp4"></video>
+  <div class="video-overlay-message"></div>
+</div>
+
+<header class="topbar">
+  <div class="topbar-brand">VIC systems</div>
+  <div class="topbar-meta">Version</div>
+</header>
+
+<div class="sidebar">
+  <div class="sidebar-header">
+    <div class="sidebar-logo">BA</div>
+    <div class="sidebar-header-text">
+      <div id="sidebar-school-name" class="sidebar-title">Belmont Academy</div>
+      <div id="sidebar-user-status" class="sidebar-status">Signed out</div>
+    </div>
+  </div>
+  <button class="tablinks active" data-tab="Home" onclick="UI.openTab(event, 'Home')">
+    <img src="Storage/Image_assets/home(trans).png" alt="Home Icon">
+    <span class="btn-text">Home</span>
+  </button>
+  <button class="tablinks" data-tab="Classes" onclick="UI.openTab(event, 'Classes')">
+    <img src="Storage/Image_assets/book(trans).png" alt="Classes Icon">
+    <span class="btn-text">Classes</span>
+  </button>
+  <button class="tablinks" id="hd-tab-btn" data-tab="HD" onclick="UI.openTab(event, 'HD')" style="display:none;">
+    <span class="btn-icon">⚙️</span>
+    <span class="btn-text">Admin Panel</span>
+  </button>
+  <button class="tablinks bottom-tab" data-tab="Settings" onclick="UI.openTab(event, 'Settings')">
+    <img src="Storage/Image_assets/settings.png" alt="Settings Icon">
+    <span class="btn-text">Settings</span>
+  </button>
+  <button class="tablinks" data-tab="Account" onclick="UI.openTab(event, 'Account')">
+    <img src="Storage/Image_assets/account.png" alt="Account Icon">
+    <span class="btn-text">Account</span>
+  </button>
+  <!-- Logout is available inside the Account panel to avoid duplicate controls -->
+</div>
+
+<div class="main">
+  <h2 id="tab-title">Home</h2>
+
+  <div id="Home" class="tabcontent" style="display: block;">
+    <h3>Welcome to Belmont Academy LMS</h3>
+    <p>Use the sidebar to manage classes, review grades, and update settings.</p>
+  </div>
+
+  <div id="Classes" class="tabcontent">
+    <div id="classes-content"></div>
+  </div>
+
+  <div id="ClassDetail" class="tabcontent">
+    <div id="class-detail-content"></div>
+  </div>
+
+  <div id="Account" class="tabcontent">
+    <div id="account-content"></div>
+  </div>
+
+  <div id="Settings" class="tabcontent">
+    <div id="settings-content"></div>
+  </div>
+
+  <div id="HD" class="tabcontent">
+    <div id="hd-content"></div>
+  </div>
+
+  <div class="context-menu" id="context-menu">
+    <ul id="context-menu-list"></ul>
+  </div>
+</div>
+
+<script src="Code/Modules/storageModule.js"></script>
+<script src="Code/Modules/authModule.js"></script>
+<script src="Code/Modules/apiModule.js"></script>
+<script src="Code/Modules/fileTransferModule.js"></script>
+<script src="Code/Modules/validationModule.js"></script>
+<script src="Code/Modules/tableModule.js"></script>
+<script src="Code/Modules/uiModule.js"></script>
+<script src="Code/Modules/classesModule.js"></script>
+<script src="Code/Modules/settingsModule.js"></script>
+<script src="Code/Modules/accountModule.js"></script>
+<script src="Code/Modules/hdModule.js"></script>
+<script src="Code/Modules/introVideoModule.js"></script>
+<script src="Code/main.js"></script>
+</body>
+</html>
