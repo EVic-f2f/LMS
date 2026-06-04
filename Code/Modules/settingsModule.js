@@ -7,7 +7,7 @@ const Settings = {
 
   async load() {
     try {
-      const response = await fetch("/api/config", { cache: "no-store" });
+      const response = await fetch("../Code/config.json");
       this.config = await response.json();
       this.render();
     } catch (e) {
