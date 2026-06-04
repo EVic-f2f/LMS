@@ -1,0 +1,2 @@
+# Node dependencies are installed locally with npm install/npm ci.
+node_modules/

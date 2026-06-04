@@ -7,7 +7,7 @@ const Settings = {
 
   async load() {
     try {
-      const response = await fetch("Code/config.json");
+      const response = await fetch("../Code/config.json");
       this.config = await response.json();
       this.render();
     } catch (e) {
@@ -258,11 +258,7 @@ const Settings = {
     const settings = this.getFormData();
 
     try {
-      const hostname = window.location.hostname;
-      const port = window.location.port || 3000;
-      const url = `http://${hostname}:${port}/api/config`;
-      
-      const response = await fetch(url, {
+      const response = await fetch("/api/config", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(settings)
