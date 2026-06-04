@@ -98,6 +98,45 @@ const Auth = {
     return Storage.clearCurrentUser();
   },
 
+  async refreshCurrentUser() {
+    const currentUser = this.getCurrentUser();
+    if (!currentUser || !currentUser.email) {
+      return null;
+    }
+
+    try {
+      const users = await this.getUsers();
+      const freshUser = users.find((user) => {
+        return user.email && String(user.email).toLowerCase() === String(currentUser.email).toLowerCase();
+      });
+
+      if (!freshUser) {
+        this.clearCurrentUser();
+        return null;
+      }
+
+      const refreshedCurrentUser = {
+        ...currentUser,
+        name: freshUser.name,
+        email: String(freshUser.email).toLowerCase(),
+        status: freshUser.status,
+        preferences: {
+          ...currentUser.preferences,
+          ...(freshUser.preferences || {})
+        },
+        lastSignedIn: freshUser.lastSignedIn || currentUser.lastSignedIn,
+        enrolledClasses: freshUser.enrolledClasses || [],
+        taughtClasses: freshUser.taughtClasses || []
+      };
+
+      this.saveCurrentUser(refreshedCurrentUser);
+      return refreshedCurrentUser;
+    } catch (error) {
+      console.warn("Could not refresh current user from server:", error);
+      return currentUser;
+    }
+  },
+
   async ensureDefaultAdmin() {
     const users = await this.getUsers();
     const normalizedEmail = this.defaultAdmin.email.toLowerCase();

@@ -15,19 +15,13 @@ const App = {
       return;
     }
 
-    // Load configuration from the server's own address
-    try {
-      const hostname = window.location.hostname;
-      const port = window.location.port || 3000;
-      const response = await fetch(`http://${hostname}:${port}/Code/config.json`);
-      this.config = await response.json();
-    } catch (e) {
-      console.warn("Failed to load config, using defaults");
-      this.config = {
-        gradeFields: ["Test", "Test1", "Test2", "Test3", "Exam"],
-        defaultStudents: []
-      };
+    await this.refreshCurrentAccount();
+    if (!this.currentAccount) {
+      window.location.href = "sign-in.html";
+      return;
     }
+
+    await this.loadConfig();
 
     // Apply theme colors
     this.applyTheme();
@@ -47,6 +41,7 @@ const App = {
 
     // Setup event listeners
     this.setupEventListeners();
+    this.setupGlobalRefresh();
 
     // Initialize Classes module if available
     if (typeof Classes !== "undefined") {
@@ -55,6 +50,22 @@ const App = {
 
     // Set default tab
     document.querySelector('.tablinks[data-tab="Home"]')?.click();
+  },
+
+  async loadConfig() {
+    try {
+      const response = await fetch("/api/config", { cache: "no-store" });
+      if (!response.ok) throw new Error("Failed to load config");
+      this.config = await response.json();
+    } catch (e) {
+      console.warn("Failed to load config, using defaults");
+      this.config = {
+        gradeFields: ["Test", "Test1", "Test2", "Test3", "Exam"],
+        defaultStudents: []
+      };
+    }
+
+    return this.config;
   },
 
   applyTheme() {
@@ -69,6 +80,41 @@ const App = {
       if (theme.warning) root.style.setProperty('--warning', theme.warning);
       if (theme.background) root.style.setProperty('--background', theme.background);
       if (theme.text) root.style.setProperty('--text', theme.text);
+    }
+  },
+
+  setupGlobalRefresh() {
+    if (this.globalRefreshStarted) {
+      return;
+    }
+
+    this.globalRefreshStarted = true;
+    window.addEventListener("focus", () => this.refreshGlobalState());
+    setInterval(() => this.refreshGlobalState(), 30000);
+  },
+
+  async refreshGlobalState() {
+    const previousEmail = this.currentAccount?.email;
+    const previousStatus = this.currentAccount?.status;
+
+    await this.refreshCurrentAccount();
+    if (!this.currentAccount) {
+      window.location.href = "sign-in.html";
+      return;
+    }
+
+    await this.loadConfig();
+    this.applyTheme();
+    this.updateSidebarInfo();
+    Table.gradeFields = this.config.gradeFields || Table.gradeFields;
+
+    if (previousEmail !== this.currentAccount.email || previousStatus !== this.currentAccount.status) {
+      this.applyAccessControl();
+    }
+
+    const hdTab = document.getElementById("HD");
+    if (hdTab && hdTab.style.display !== "none" && typeof HD !== "undefined") {
+      HD.render();
     }
   },
 
@@ -164,6 +210,12 @@ const App = {
     if (this.currentAccount) {
       console.info(`Auto-logged in as ${this.currentAccount.email}`);
     }
+  },
+
+  async refreshCurrentAccount() {
+    const refreshedUser = await Auth.refreshCurrentUser();
+    this.currentAccount = refreshedUser;
+    return refreshedUser;
   },
 
   updateSidebarInfo() {

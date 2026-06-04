@@ -212,12 +212,19 @@ async function getUserData() {
 
 async function saveUserData(updatedUsers) {
     try {
+        const existingUsers = await getUserData();
+        const existingByEmail = new Map(
+            existingUsers.map((user) => [String(user.email || "").toLowerCase(), user])
+        );
+
         await runAsync("BEGIN TRANSACTION");
         await runAsync("DELETE FROM users");
 
         for (const user of updatedUsers) {
-            // Ensure passwordHash is never empty; use Admin@123 hash as fallback
-            let passwordHash = String(user.passwordHash || "").trim();
+            const normalizedEmail = String(user.email || "").toLowerCase();
+            const existingUser = existingByEmail.get(normalizedEmail);
+            // Admin dashboard updates receive sanitized users, so preserve existing password hashes.
+            let passwordHash = String(user.passwordHash || existingUser?.passwordHash || "").trim();
             if (!passwordHash && (user.status === "Administrator" || user.status === "Teacher" || user.status === "Admin")) {
                 passwordHash = crypto.createHash("sha256").update("Admin@123").digest("hex");
             }
@@ -498,6 +505,24 @@ function handleRequest(req, res) {
         if (req.method === "OPTIONS") {
             res.writeHead(204);
             res.end();
+            return;
+        }
+
+        if (req.method === "GET") {
+            const configPath = path.join(__dirname, "config.json");
+            fs.readFile(configPath, "utf8", (err, content) => {
+                if (err) {
+                    sendJson(res, 404, { success: false, error: "Config not found" });
+                    return;
+                }
+
+                res.writeHead(200, {
+                    "Content-Type": "application/json",
+                    "Cache-Control": "no-store",
+                    "Access-Control-Allow-Origin": "*"
+                });
+                res.end(content);
+            });
             return;
         }
 

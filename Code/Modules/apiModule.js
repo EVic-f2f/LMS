@@ -3,17 +3,14 @@
  */
 
 const API = {
-  endpoint: "http://localhost:3000/api/students",
+  endpoint: "/api/students",
 
   setEndpoint(url) {
     this.endpoint = url;
   },
 
   getEndpoint() {
-    // Try to use server's own address first
-    const hostname = window.location.hostname;
-    const port = window.location.port || 3000;
-    return `http://${hostname}:${port}/api/students`;
+    return this.endpoint;
   },
 
   async getStudents() {
