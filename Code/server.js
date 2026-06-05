@@ -623,25 +623,7 @@ function handleRequest(req, res) {
             console.log(`LMS server running at http://localhost:${PORT}`);
             console.log(`Use Ctrl+C to stop.`);
             
-            // Auto-open browser
-            const url = `http://localhost:${PORT}`;
-            const platform = os.platform();
             
-            setTimeout(() => {
-                if (platform === "darwin") {
-                    //exec(`open ${url}`, (err) => {
-                        if (err) console.log("Browser could not auto-open. Navigate to " + url);
-                    });
-                } else if (platform === "win32") {
-                    //exec(`start ${url}`, (err) => {
-                        if (err) console.log("Browser could not auto-open. Navigate to " + url);
-                    });
-                } else {
-                    //exec(`xdg-open ${url}`, (err) => {
-                        if (err) console.log("Browser could not auto-open. Navigate to " + url);
-                    });
-                }
-            }, 500);
         });
     } catch (error) {
         console.error("Failed to initialize LMS server:", error);
