@@ -87,7 +87,8 @@ const Classes = {
                   <span><strong>Class ID:</strong> ${this.escapeHtml(classId)}</span>
                 <span><strong>Students:</strong> ${classInfo && classInfo.students ? classInfo.students.length : 0}</span>
               </div>
-                <div class="class-actions"><button onclick="Classes.openClassDetail(${JSON.stringify(classId)}, ${JSON.stringify(teacher ? teacher.email : '')})" class="btn-primary">Open Class</button></div>
+                <div class="class-actions"><button onclick="Classes.openClassDetail('${this.escapeHtml(classId)}', '${this.escapeHtml(teacher ? teacher.email : '')}')" class="btn-primary">Open Class</button></div>
+
             </div>
           `;
         }).join('')
@@ -128,7 +129,8 @@ const Classes = {
                       return `
                         <li style="margin-bottom: 10px; display:flex; align-items:center; justify-content:space-between; gap: 10px;">
                               <span class="muted">${this.escapeHtml(classInfo.name)} (${this.escapeHtml(classInfo.subject)})</span>
-                              <button onclick="Classes.requestJoinClass(${JSON.stringify(teacher.email)}, ${JSON.stringify(classInfo.id)})" class="${buttonDisabled ? 'btn-secondary' : 'btn-primary'}" ${buttonDisabled ? 'disabled' : ''}>
+                              <button onclick="Classes.requestJoinClass('${this.escapeHtml(teacher.email)}', '${this.escapeHtml(classInfo.id)}')" class="${buttonDisabled ? 'btn-secondary' : 'btn-primary'}" ${buttonDisabled ? 'disabled' : ''}>
+
                             ${buttonText}
                           </button>
                         </li>
@@ -150,7 +152,7 @@ const Classes = {
 
     content.innerHTML = `
       <div style="margin-bottom: 20px;">
-        <h4>👨‍🏫 My Classes</h4>
+        <h4>My Classes</h4>
         <button onclick="Classes.createNewClass()" class="btn-secondary" style="margin-bottom: 15px;">+ Create New Class</button>
         <div id="teacher-classes-list">
           ${user.taughtClasses && user.taughtClasses.length > 0
@@ -163,12 +165,13 @@ const Classes = {
                     <span><strong>Teacher:</strong> ${user.name}</span>
                   </div>
                   <div class="class-actions">
-                    <button onclick="Classes.openClassDetail(${JSON.stringify(classInfo.id)}, ${JSON.stringify(user.email)})" class="btn-primary">Manage Class</button>
+                    <button onclick="Classes.openClassDetail('${this.escapeHtml(classInfo.id)}', '${this.escapeHtml(user.email)}')" class="btn-primary">Manage Class</button>
+
                   </div>
 
                   ${classInfo.pendingRequests && classInfo.pendingRequests.length > 0 ? `
                     <div style="margin-top: 10px;">
-                      <h6>📝 Pending Requests:</h6>
+                      <h6>Pending Requests:</h6>
                       <ul>
                         ${classInfo.pendingRequests.map(request => {
                           const student = students.find(s => s.email === request.studentEmail);
@@ -176,8 +179,10 @@ const Classes = {
                             <li style="display: flex; justify-content: space-between; align-items: center; margin: 5px 0;">
                               <span>${student ? student.name : request.studentEmail}</span>
                               <div>
-                                <button onclick="Classes.acceptRequest(${JSON.stringify(classInfo.id)}, ${JSON.stringify(request.studentEmail)})" class="btn-secondary" style="margin-right:5px;">Accept</button>
-                                <button onclick="Classes.rejectRequest(${JSON.stringify(classInfo.id)}, ${JSON.stringify(request.studentEmail)})" class="btn-primary">Reject</button>
+                                <button onclick="Classes.acceptRequest('${this.escapeHtml(classInfo.id)}', '${this.escapeHtml(request.studentEmail)}')" class="btn-secondary" style="margin-right:5px;">Accept</button>
+
+                                <button onclick="Classes.rejectRequest('${this.escapeHtml(classInfo.id)}', '${this.escapeHtml(request.studentEmail)}')" class="btn-primary">Reject</button>
+
                               </div>
                             </li>
                           `;
@@ -198,8 +203,19 @@ const Classes = {
     this.selectedClassId = classId;
     this.selectedTeacherEmail = teacherEmail;
     UI.openTab(null, 'ClassDetail');
-    await this.renderClassDetail();
+
+    const content = document.getElementById('class-detail-content');
+    if (content) content.innerHTML = '<p class="muted">Loading class details...</p>';
+
+    try {
+      await this.renderClassDetail();
+    } catch (e) {
+      console.error('openClassDetail error:', e);
+      if (content) content.innerHTML = '<p style="color:red;">Failed to load class details.</p>';
+      alert('Failed to load class details. Check console for details.');
+    }
   },
+
 
   async renderClassDetail() {
     const content = document.getElementById('class-detail-content');
