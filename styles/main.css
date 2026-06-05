@@ -311,6 +311,16 @@ body.sidebar-expanded .sidebar button .btn-text,
   margin-bottom: 0;
 }
 
+.sidebar-logo img {
+  width: 100%;
+  height: auto;
+  max-width: 42px;   
+  max-height: 42px;  
+  object-fit: contain; 
+  border-radius: 8px;  
+}
+
+
 /* Tab content */
 .tabcontent {
   display: none;
@@ -489,12 +499,26 @@ body.sidebar-expanded .sidebar button .btn-text,
 
 .grade-cell {
   min-width: 60px;
+  border: 1px solid rgba(0,0,0,0.06);
 }
+
+/* Class Details grades table */
+#class-grades-table {
+  border-collapse: collapse;
+}
+
+#class-grades-table th,
+#class-grades-table td {
+  border-bottom: 1px solid rgba(0,0,0,0.06);
+  padding: 6px 10px; /* reduce vertical spacing */
+}
+
 
 .grade-cell:focus {
   outline: 2px solid var(--primary);
   background-color: #fff9e6;
 }
+
 
 .student-name {
   font-weight: 600;

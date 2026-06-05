@@ -2,7 +2,7 @@ const http = require("http");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
-const Database = require("better-sqlite3");
+const sqlite3 = require("sqlite3").verbose();
 const { exec } = require("child_process");
 const os = require("os");
 
@@ -32,34 +32,33 @@ const defaultStudents = [
     }
 ];
 
-const db = new Database(dbPath, { fileMustExist: false });
+const db = new sqlite3.Database(dbPath, (err) => {
+  if (err) {
+    console.error("Error opening database:", err.message);
+  } else {
+    console.log("Connected to SQLite database.");
+  }
+});
 
-db.pragma("journal_mode = WAL");
-
-db.pragma("foreign_keys = ON");
 
 function allAsync(sql, params = []) {
-    return new Promise((resolve, reject) => {
-        try {
-            const rows = db.prepare(sql).all(params);
-            resolve(rows);
-        } catch (err) {
-            reject(err);
-        }
+  return new Promise((resolve, reject) => {
+    db.all(sql, params, (err, rows) => {
+      if (err) reject(err);
+      else resolve(rows);
     });
+  });
 }
 
 function runAsync(sql, params = []) {
-    return new Promise((resolve, reject) => {
-        try {
-            const stmt = db.prepare(sql);
-            const result = stmt.run(params);
-            resolve(result);
-        } catch (err) {
-            reject(err);
-        }
+  return new Promise((resolve, reject) => {
+    db.run(sql, params, function (err) {
+      if (err) reject(err);
+      else resolve(this);
     });
+  });
 }
+
 
 async function getSingleValue(sql, params = []) {
     const rows = await allAsync(sql, params);
@@ -69,6 +68,10 @@ async function getSingleValue(sql, params = []) {
 async function initializeDatabase() {
     fs.mkdirSync(storageFolder, { recursive: true });
     fs.mkdirSync(databaseFolder, { recursive: true });
+
+
+  await runAsync("PRAGMA journal_mode = WAL");
+  await runAsync("PRAGMA foreign_keys = ON");
 
     await runAsync(
         `CREATE TABLE IF NOT EXISTS students (
@@ -212,19 +215,12 @@ async function getUserData() {
 
 async function saveUserData(updatedUsers) {
     try {
-        const existingUsers = await getUserData();
-        const existingByEmail = new Map(
-            existingUsers.map((user) => [String(user.email || "").toLowerCase(), user])
-        );
-
         await runAsync("BEGIN TRANSACTION");
         await runAsync("DELETE FROM users");
 
         for (const user of updatedUsers) {
-            const normalizedEmail = String(user.email || "").toLowerCase();
-            const existingUser = existingByEmail.get(normalizedEmail);
-            // Admin dashboard updates receive sanitized users, so preserve existing password hashes.
-            let passwordHash = String(user.passwordHash || existingUser?.passwordHash || "").trim();
+            // Ensure passwordHash is never empty; use Admin@123 hash as fallback
+            let passwordHash = String(user.passwordHash || "").trim();
             if (!passwordHash && (user.status === "Administrator" || user.status === "Teacher" || user.status === "Admin")) {
                 passwordHash = crypto.createHash("sha256").update("Admin@123").digest("hex");
             }
@@ -505,24 +501,6 @@ function handleRequest(req, res) {
         if (req.method === "OPTIONS") {
             res.writeHead(204);
             res.end();
-            return;
-        }
-
-        if (req.method === "GET") {
-            const configPath = path.join(__dirname, "config.json");
-            fs.readFile(configPath, "utf8", (err, content) => {
-                if (err) {
-                    sendJson(res, 404, { success: false, error: "Config not found" });
-                    return;
-                }
-
-                res.writeHead(200, {
-                    "Content-Type": "application/json",
-                    "Cache-Control": "no-store",
-                    "Access-Control-Allow-Origin": "*"
-                });
-                res.end(content);
-            });
             return;
         }
 

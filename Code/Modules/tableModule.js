@@ -7,7 +7,12 @@ const Table = {
 
   buildStudentTable(students) {
     const tbody = document.querySelector("#student-table tbody");
+    if (!tbody) {
+      console.warn("student-table tbody not found; skipping buildStudentTable");
+      return;
+    }
     tbody.innerHTML = "";
+
 
     students.forEach((student, index) => {
       const row = document.createElement("tr");
