@@ -47,8 +47,12 @@ const Auth = {
   },
 
   async getUsers() {
+    const timeoutMs = 5000;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
     try {
-      const response = await fetch(`/api/users`);
+      const response = await fetch(`/api/users`, { signal: controller.signal });
       if (!response.ok) throw new Error("Failed to fetch users");
       return await response.json();
     } catch (error) {
@@ -61,15 +65,22 @@ const Auth = {
         console.warn("Auth read users error:", e);
         return [];
       }
+    } finally {
+      clearTimeout(timeoutId);
     }
   },
 
   async saveUsers(users) {
+    const timeoutMs = 5000;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
     try {
       const response = await fetch(`/api/users`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(users)
+        body: JSON.stringify(users),
+        signal: controller.signal
       });
       if (!response.ok) throw new Error("Failed to save users");
       return await response.json();
@@ -83,6 +94,8 @@ const Auth = {
         console.warn("Auth save users error:", e);
         return false;
       }
+    } finally {
+      clearTimeout(timeoutId);
     }
   },
 
@@ -96,45 +109,6 @@ const Auth = {
 
   clearCurrentUser() {
     return Storage.clearCurrentUser();
-  },
-
-  async refreshCurrentUser() {
-    const currentUser = this.getCurrentUser();
-    if (!currentUser || !currentUser.email) {
-      return null;
-    }
-
-    try {
-      const users = await this.getUsers();
-      const freshUser = users.find((user) => {
-        return user.email && String(user.email).toLowerCase() === String(currentUser.email).toLowerCase();
-      });
-
-      if (!freshUser) {
-        this.clearCurrentUser();
-        return null;
-      }
-
-      const refreshedCurrentUser = {
-        ...currentUser,
-        name: freshUser.name,
-        email: String(freshUser.email).toLowerCase(),
-        status: freshUser.status,
-        preferences: {
-          ...currentUser.preferences,
-          ...(freshUser.preferences || {})
-        },
-        lastSignedIn: freshUser.lastSignedIn || currentUser.lastSignedIn,
-        enrolledClasses: freshUser.enrolledClasses || [],
-        taughtClasses: freshUser.taughtClasses || []
-      };
-
-      this.saveCurrentUser(refreshedCurrentUser);
-      return refreshedCurrentUser;
-    } catch (error) {
-      console.warn("Could not refresh current user from server:", error);
-      return currentUser;
-    }
   },
 
   async ensureDefaultAdmin() {
