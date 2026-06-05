@@ -619,7 +619,7 @@ function handleRequest(req, res) {
     try {
         await initializeDatabase();
         const server = http.createServer(handleRequest);
-        server.listen(PORT, () => {
+        server.listen(PORT,"0.0.0.0", () => {
             console.log(`LMS server running at http://localhost:${PORT}`);
             console.log(`Use Ctrl+C to stop.`);
             
