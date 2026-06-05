@@ -629,15 +629,15 @@ function handleRequest(req, res) {
             
             setTimeout(() => {
                 if (platform === "darwin") {
-                    exec(`open ${url}`, (err) => {
+                    //exec(`open ${url}`, (err) => {
                         if (err) console.log("Browser could not auto-open. Navigate to " + url);
                     });
                 } else if (platform === "win32") {
-                    exec(`start ${url}`, (err) => {
+                    //exec(`start ${url}`, (err) => {
                         if (err) console.log("Browser could not auto-open. Navigate to " + url);
                     });
                 } else {
-                    exec(`xdg-open ${url}`, (err) => {
+                    //exec(`xdg-open ${url}`, (err) => {
                         if (err) console.log("Browser could not auto-open. Navigate to " + url);
                     });
                 }
