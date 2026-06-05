@@ -73,7 +73,7 @@ const UI = {
     if (target.tagName === "TR" && target.closest("tbody")) {
       this.selectedRow = target;
       const li = document.createElement("li");
-      li.textContent = "🗑️ Delete Student";
+      li.textContent = "Delete Student";
       li.onclick = () => this.deleteRow();
       menuList.appendChild(li);
     } else if (target.tagName === "TH") {
@@ -81,13 +81,13 @@ const UI = {
       this.selectedColumn = thIndex;
 
       const liOrder = document.createElement("li");
-      liOrder.textContent = "📊 Order";
+      liOrder.textContent = "Order";
       liOrder.onclick = () => this.sortColumn();
       menuList.appendChild(liOrder);
 
       if (thIndex > 0) {
         const liMax = document.createElement("li");
-        liMax.textContent = "⚙️ Set Max Score";
+        liMax.textContent = "Set Max Score";
         liMax.onclick = () => this.setMaxScorePrompt();
         menuList.appendChild(liMax);
       }
