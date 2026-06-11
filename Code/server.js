@@ -6,6 +6,9 @@ const sqlite3 = require("sqlite3").verbose();
 const { exec } = require("child_process");
 const os = require("os");
 
+const { createClient } = require("@supabase/supabase-js");
+
+
 const PORT = process.env.PORT || 3000;
 const rootDir = path.join(__dirname, "..", "");
 const storageFolder = path.join(rootDir, "Storage");
@@ -32,6 +35,26 @@ const defaultStudents = [
     }
 ];
 
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+function getSupabaseClientOrNull() {
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) return null;
+  return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+    auth: { persistSession: false }
+  });
+}
+
+const supabase = getSupabaseClientOrNull();
+
+function requireSupabase() {
+  if (!supabase) {
+    throw new Error("Supabase env vars missing. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.");
+  }
+  return supabase;
+}
+
+
 const db = new sqlite3.Database(dbPath, (err) => {
   if (err) {
     console.error("Error opening database:", err.message);
@@ -39,6 +62,7 @@ const db = new sqlite3.Database(dbPath, (err) => {
     console.log("Connected to SQLite database.");
   }
 });
+
 
 
 function allAsync(sql, params = []) {
@@ -81,6 +105,9 @@ async function initializeDatabase() {
         )`
     );
 
+    // NOTE: users table is managed in Supabase now (Render deployment).
+    // Keep SQLite table creation only for backwards compatibility/local imports if needed.
+    // If you no longer want the SQLite users table, remove this block.
     await runAsync(
         `CREATE TABLE IF NOT EXISTS users (
             email TEXT PRIMARY KEY,
@@ -94,6 +121,7 @@ async function initializeDatabase() {
             taughtClasses TEXT NOT NULL DEFAULT '[]'
         )`
     );
+
 
     const studentCount = await getSingleValue("SELECT COUNT(*) AS count FROM students");
     const userCount = await getSingleValue("SELECT COUNT(*) AS count FROM users");
@@ -114,6 +142,8 @@ async function initializeDatabase() {
         await saveStudentData(initialStudents);
     }
 
+    // NOTE: users seeding now targets Supabase via saveUserData().
+    // We still keep the SQLite count check, but saveUserData writes to Supabase.
     if (userCount === 0) {
         const jsonPath = path.join(storageFolder, `${usersFileName}.json`);
         if (fs.existsSync(jsonPath)) {
@@ -123,7 +153,7 @@ async function initializeDatabase() {
                     await saveUserData(imported.users);
                 }
             } catch (error) {
-                console.warn("Could not import Users.json into SQLite:", error.message);
+                console.warn("Could not import Users.json into Supabase:", error.message);
             }
         }
 
@@ -165,6 +195,7 @@ async function initializeDatabase() {
     }
 }
 
+
 async function getStudentData() {
     const rows = await allAsync("SELECT * FROM students");
     return rows.map((row) => ({
@@ -199,55 +230,60 @@ async function saveStudentData(updatedStudents) {
 }
 
 async function getUserData() {
-    const rows = await allAsync("SELECT * FROM users");
-    return rows.map((row) => ({
+    const { data, error } = await supabase
+        .from("users")
+        .select("email, name, status, preferences, passwordHash, createdAt, lastSignedIn, enrolledClasses, taughtClasses");
+
+    if (error) throw error;
+
+    return (data || []).map((row) => ({
         email: row.email,
         name: row.name,
         status: row.status,
-        preferences: JSON.parse(row.preferences || "{}"),
+        preferences: row.preferences || {},
         passwordHash: row.passwordHash,
         createdAt: row.createdAt,
         lastSignedIn: row.lastSignedIn,
-        enrolledClasses: JSON.parse(row.enrolledClasses || "[]"),
-        taughtClasses: JSON.parse(row.taughtClasses || "[]")
+        enrolledClasses: row.enrolledClasses || [],
+        taughtClasses: row.taughtClasses || []
     }));
 }
 
 async function saveUserData(updatedUsers) {
+    // Simplest compatible behavior with current API: replace the full users set.
+    // This uses service-role key, so it bypasses RLS.
     try {
-        await runAsync("BEGIN TRANSACTION");
-        await runAsync("DELETE FROM users");
+        const { error: delError } = await supabase.from("users").delete().neq("email", "");
+        if (delError) throw delError;
 
         for (const user of updatedUsers) {
-            // Ensure passwordHash is never empty; use Admin@123 hash as fallback
             let passwordHash = String(user.passwordHash || "").trim();
             if (!passwordHash && (user.status === "Administrator" || user.status === "Teacher" || user.status === "Admin")) {
                 passwordHash = crypto.createHash("sha256").update("Admin@123").digest("hex");
             }
-            
-            await runAsync(
-                "INSERT OR REPLACE INTO users (email, name, status, preferences, passwordHash, createdAt, lastSignedIn, enrolledClasses, taughtClasses) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                [
-                    String(user.email || ""),
-                    String(user.name || ""),
-                    String(user.status || ""),
-                    JSON.stringify(user.preferences || {}),
-                    passwordHash,
-                    String(user.createdAt || ""),
-                    String(user.lastSignedIn || ""),
-                    JSON.stringify(user.enrolledClasses || []),
-                    JSON.stringify(user.taughtClasses || [])
-                ]
-            );
+
+            const record = {
+                email: String(user.email || ""),
+                name: String(user.name || ""),
+                status: String(user.status || ""),
+                preferences: user.preferences || {},
+                passwordHash,
+                createdAt: String(user.createdAt || ""),
+                lastSignedIn: String(user.lastSignedIn || ""),
+                enrolledClasses: user.enrolledClasses || [],
+                taughtClasses: user.taughtClasses || []
+            };
+
+            const { error: upsertError } = await supabase.from("users").upsert(record, { onConflict: "email" });
+            if (upsertError) throw upsertError;
         }
 
-        await runAsync("COMMIT");
         return updatedUsers;
     } catch (error) {
-        await runAsync("ROLLBACK");
         throw error;
     }
 }
+
 
 function setCorsHeaders(res) {
     res.setHeader("Access-Control-Allow-Origin", "*");
@@ -623,8 +659,9 @@ function handleRequest(req, res) {
             console.log(`LMS server running at http://localhost:${PORT}`);
             console.log(`Use Ctrl+C to stop.`);
             
+
             
-        });
+   });
     } catch (error) {
         console.error("Failed to initialize LMS server:", error);
         process.exit(1);
