@@ -1,0 +1,21 @@
+{
+  "schoolName": "Belmont Academy",
+  "location": "Bluefields, Westmoreland, Jamaica",
+  "apiEndpoint": "http://localhost:3000/api/students",
+  "gradeFields": [
+    "Test 1",
+    "Test 2",
+    "Test 3",
+    "Test 4",
+    "Exam"
+  ],
+  "theme": {
+    "primary": "#000000",
+    "secondary": "#710909",
+    "accent": "#000000",
+    "success": "#000000",
+    "warning": "#fb7979",
+    "background": "#575757",
+    "text": "#000000"
+  }
+}

@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sign Up | Belmont Academy LMS</title>
+  <link rel="stylesheet" href="/styles/main.css">
+</head>
+<body class="auth-page sign-up">
+  <div class="auth-card">
+    <h1>Create Account</h1>
+    <form id="sign-up-form">
+      <label>
+        Full Name
+        <input type="text" name="name" autocomplete="name" required />
+      </label>
+      <label>
+        Email Address
+        <input type="email" name="email" autocomplete="username" required />
+      </label>
+      <label>
+        Password
+        <input type="password" name="password" autocomplete="new-password" required />
+      </label>
+      <label>
+        Confirm Password
+        <input type="password" name="confirmPassword" autocomplete="new-password" required />
+      </label>
+      <label>
+        Choose your role
+        <select id="status" name="status"></select>
+      </label>
+      <label class="checkbox-row">
+        <input type="checkbox" name="notifications" checked /> Receive grade notifications
+      </label>
+      <label class="checkbox-row">
+        <input type="checkbox" name="remember" checked /> Keep me signed in
+      </label>
+      <button type="submit">Create Account</button>
+    </form>
+    <div id="sign-up-message" class="message"></div>
+    <p class="helper">Already registered? <a href="sign-in.html">Sign in here</a></p>
+  </div>
+
+  <script src="Code/Modules/storageModule.js"></script>
+  <script src="Code/Modules/authModule.js"></script>
+  <script src="Code/Modules/authPage.js"></script>
+</body>
+</html>

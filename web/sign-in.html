@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sign In | Belmont Academy LMS</title>
+  <link rel="stylesheet" href="/styles/main.css">
+</head>
+<body class="auth-page sign-in">
+  <div class="auth-card">
+    <h1>Sign In</h1>
+    <form id="sign-in-form">
+      <label>
+        Email Address
+        <input type="email" name="email" autocomplete="username" required />
+      </label>
+      <label>
+        Password
+        <input type="password" name="password" autocomplete="current-password" required />
+      </label>
+      <div class="checkbox-row">
+        <label><input type="checkbox" name="remember" checked /> Keep me signed in</label>
+      </div>
+      <button type="submit">Sign In</button>
+    </form>
+    <div id="sign-in-message" class="message"></div>
+    <p class="helper">New here? <a href="sign-up.html">Create an account</a></p>
+  </div>
+
+  <script src="Code/Modules/storageModule.js"></script>
+  <script src="Code/Modules/authModule.js"></script>
+  <script src="Code/Modules/authPage.js"></script>
+</body>
+</html>

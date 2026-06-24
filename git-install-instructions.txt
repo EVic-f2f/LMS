@@ -1,0 +1,13 @@
+Git install prompt (Windows)
+
+1) Open: https://git-scm.com/download/win
+2) Download the Windows installer.
+3) Run the installer and choose defaults (or ensure Git Bash is enabled).
+
+Common command-line installs (if you use a package manager):
+- With Winget:
+  winget install --id Git.Git -e --source winget
+
+After installing, verify:
+- git --version
+

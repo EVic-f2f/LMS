@@ -1,0 +1,108 @@
+{
+    "users": [
+        {
+            "name": "Web Admin",
+            "email": "webadmin@lms.local",
+            "status": "Administrator",
+            "preferences": {
+                "autoLogin": true,
+                "notifications": true
+            },
+            "passwordHash": "e86f78a8a3caf0b60d8e74e5942aa6d86dc150cd3c03338aef25b7d2d7e3acc7",
+            "createdAt": "2026-05-11T18:05:11.519Z",
+            "lastSignedIn": "2026-05-18T23:23:09.887Z",
+            "taughtClasses": [
+                {
+                    "id": "class_admin_math_001",
+                    "name": "Advanced Mathematics",
+                    "subject": "Mathematics",
+                    "students": [
+                        "mare.l@test.com",
+                        "guess.m@local.lms"
+                    ],
+                    "pendingRequests": [],
+                    "createdAt": "2024-01-01T00:00:00.000Z",
+                    "studentGrades": {
+                        "mare.l@test.com": {
+                            "Test": "89",
+                            "Test1": "48",
+                            "Test2": "39",
+                            "Test3": "37",
+                            "Exam": "48"
+                        },
+                        "guess.m@local.lms": {
+                            "Test": "",
+                            "Test1": "",
+                            "Test2": "",
+                            "Test3": "",
+                            "Exam": ""
+                        }
+                    }
+                },
+                {
+                    "id": "class_admin_science_001",
+                    "name": "Physics Fundamentals",
+                    "subject": "Physics",
+                    "students": [
+                        "mare.l@test.com",
+                        "guess.m@local.lms"
+                    ],
+                    "pendingRequests": [],
+                    "createdAt": "2024-01-01T00:00:00.000Z",
+                    "studentGrades": {
+                        "mare.l@test.com": {
+                            "Testtt": "86",
+                            "Test1": "59",
+                            "Test2": "59",
+                            "Test3": "48",
+                            "Exam": "39"
+                        }
+                    }
+                },
+                {
+                    "id": "class_1779145235772_q9menpcr4",
+                    "name": "Nobody",
+                    "subject": "knows you like i do",
+                    "students": [
+                        "guess.m@local.lms"
+                    ],
+                    "pendingRequests": [],
+                    "createdAt": "2026-05-18T23:00:35.772Z"
+                }
+            ]
+        },
+        {
+            "name": "Maren Luthor",
+            "email": "mare.l@test.com",
+            "status": "Student",
+            "preferences": {
+                "autoLogin": true,
+                "notifications": true
+            },
+            "passwordHash": "15e2b0d3c33891ebb0f1ef609ec419420c20e320ce94c65fbc8c3312448eb225",
+            "createdAt": "2026-05-11T18:09:48.097Z",
+            "lastSignedIn": "2026-05-18T23:01:03.824Z",
+            "enrolledClasses": [
+                "class_admin_math_001",
+                "class_admin_science_001"
+            ]
+        },
+        {
+            "name": "Guess Me",
+            "email": "guess.m@local.lms",
+            "status": "Student",
+            "preferences": {
+                "autoLogin": true,
+                "notifications": true
+            },
+            "passwordHash": "8a9bcf1e51e812d0af8465a8dbcc9f741064bf0af3b3d08e6b0246437c19f7fb",
+            "createdAt": "2026-05-18T23:19:44.120Z",
+            "lastSignedIn": "2026-05-18T23:22:12.709Z",
+            "enrolledClasses": [
+                "class_admin_math_001",
+                "class_admin_science_001",
+                "class_1779145235772_q9menpcr4"
+            ]
+        }
+    ]
+}

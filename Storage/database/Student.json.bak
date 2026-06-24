@@ -1,0 +1,37 @@
+{
+    "student": [
+        {
+            "studentId": "1",
+            "student_name": "hh",
+            "Grades": {
+                "Testtt": "",
+                "Test1": "66",
+                "Test2": "77",
+                "Test3": "79",
+                "Exam": "79"
+            }
+        },
+        {
+            "studentId": "2",
+            "student_name": "ryfb",
+            "Grades": {
+                "Testtt": "",
+                "Test1": "68",
+                "Test2": "58",
+                "Test3": "59",
+                "Exam": "69"
+            }
+        },
+        {
+            "studentId": "3",
+            "student_name": "Tyrone Marker",
+            "Grades": {
+                "Testtt": "28",
+                "Test1": "79",
+                "Test2": "100",
+                "Test3": "30",
+                "Exam": "73"
+            }
+        }
+    ]
+}
