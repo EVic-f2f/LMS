@@ -20,11 +20,9 @@ const App = {
     // Load configuration from Supabase (per user school), with fallback to local Code/config.json
     try {
       if (this.currentAccount?.email) {
-        const hostname = window.location.hostname;
-        const port = window.location.port || 3000;
         const requestedSchoolId = new URLSearchParams(window.location.search).get("schoolId");
         const schoolQuery = requestedSchoolId ? `&schoolId=${encodeURIComponent(requestedSchoolId)}` : "";
-        const url = `http://${hostname}:${port}/api/schools/by-user?email=${encodeURIComponent(this.currentAccount.email)}${schoolQuery}`;
+        const url = `/api/schools/by-user?email=${encodeURIComponent(this.currentAccount.email)}${schoolQuery}`;
         const response = await fetch(url);
         const json = await response.json();
 
@@ -41,9 +39,7 @@ const App = {
     } catch (e) {
       console.warn("Failed to load Supabase config, using local defaults");
       try {
-        const hostname = window.location.hostname;
-        const port = window.location.port || 3000;
-        const response = await fetch(`http://${hostname}:${port}/Code/config.json`);
+        const response = await fetch("/Code/config.json");
         this.config = await response.json();
       } catch {
         this.config = {

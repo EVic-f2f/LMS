@@ -1,7 +1,7 @@
 {
   "schoolName": "Your School",
   "location": "",
-  "apiEndpoint": "http://localhost:3000/api/students",
+  "apiEndpoint": "/api/students",
   "gradeFields": [
     "Test 1",
     "Test 2",

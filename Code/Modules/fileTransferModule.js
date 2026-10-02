@@ -4,9 +4,7 @@
 
 const FileTransferService = {
   getEndpoint() {
-    const hostname = window.location.hostname;
-    const port = window.location.port || 3000;
-    return `http://${hostname}:${port}/api/files`;
+    return "/api/files";
   },
 
   async listFiles() {

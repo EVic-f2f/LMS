@@ -326,9 +326,7 @@ const Auth = {
     }
     const email = currentUser.email;
 
-    const hostname = window.location.hostname;
-    const port = window.location.port || 3000;
-    const url = `http://${hostname}:${port}/api/schools/create-and-assign`;
+    const url = "/api/schools/create-and-assign";
 
     const res = await fetch(url, {
       method: "POST",

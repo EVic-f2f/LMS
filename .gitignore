@@ -4,6 +4,7 @@ node_modules/
 !.env.example
 
 Storage/database/
+Storage/Image_assets/_Section__*.png
 
 Code/Helpers/Coms.txt
 Code/Helpers/open_local_browser.js
