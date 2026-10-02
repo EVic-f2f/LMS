@@ -263,6 +263,7 @@ const Classes = {
         <button onclick="Classes.switchClassTab('classwork')" class="class-tab-btn" data-tab="classwork">📋 Class Work</button>
       </div>
     `;
+    const classworkTabContent = this.renderClassworkTab(currentUser);
 
     if (Auth.isTeacherOrHigher(currentUser)) {
       const rows = enrolledStudents.length > 0
@@ -303,15 +304,6 @@ const Classes = {
         </div>
       `;
 
-      const classworkTabContent = `
-        <div id="class-tab-classwork" class="class-tab-content" style="display: none;">
-          <div class="themed-panel">
-            <h4 style="margin-top:0;">Class Work & Assignments</h4>
-            <p class="muted" style="margin-bottom:0;">No class work assigned yet.</p>
-          </div>
-        </div>
-      `;
-
       content.innerHTML = `
         ${header}
         ${tabBar}
@@ -331,14 +323,126 @@ const Classes = {
             <p class="muted" style="margin-bottom:0;">Your grades will appear here.</p>
           </div>
         </div>
-        <div id="class-tab-classwork" class="class-tab-content" style="display: none;">
-          <div class="themed-panel">
-            <h4 style="margin-top:0;">Class Work & Assignments</h4>
-            <p class="muted" style="margin-bottom:0;">Class work and assignments will appear here.</p>
-          </div>
-        </div>
+        ${classworkTabContent}
       `;
     }
+
+    const uploadInput = content.querySelector('#classwork-upload-input');
+    const uploadButton = content.querySelector('#classwork-upload-button');
+    uploadButton?.addEventListener('click', () => uploadInput?.click());
+    uploadInput?.addEventListener('change', () => this.uploadClassFiles(uploadInput.files));
+  },
+
+  renderClassworkTab(user) {
+    const canUpload = Auth.isTeacherOrHigher(user);
+    return `
+      <div id="class-tab-classwork" class="class-tab-content" style="display:none;">
+        <div class="themed-panel">
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+            <h4 style="margin:0;">Class Work & Resources</h4>
+            ${canUpload ? `
+              <div>
+                <input id="classwork-upload-input" type="file" multiple style="display:none;">
+                <button id="classwork-upload-button" type="button" class="btn-primary">Upload files</button>
+              </div>
+            ` : ''}
+          </div>
+          <p id="classwork-upload-status" class="muted" aria-live="polite" style="margin:10px 0;"></p>
+          <div id="classwork-files-list" class="muted">Loading files...</div>
+        </div>
+      </div>
+    `;
+  },
+
+  async loadClassFiles(classId) {
+    const container = document.getElementById('classwork-files-list');
+    if (!container || !classId || typeof FileTransferService === 'undefined') return;
+
+    try {
+      const files = await FileTransferService.listFiles(classId);
+      if (!container.isConnected || classId !== this.selectedClassId) return;
+      container.replaceChildren();
+
+      if (!files.length) {
+        container.textContent = 'No files uploaded yet.';
+        return;
+      }
+
+      const list = document.createElement('ul');
+      list.style.cssText = 'list-style:none; padding:0; margin:0;';
+      files.forEach((file) => {
+        const item = document.createElement('li');
+        item.style.cssText = 'display:flex; justify-content:space-between; align-items:center; gap:12px; padding:10px 0; border-top:1px solid rgba(0,0,0,0.08);';
+
+        const name = document.createElement('span');
+        name.textContent = `${file.filename} (${this.formatFileSize(file.size)})`;
+        item.appendChild(name);
+
+        const downloadButton = document.createElement('button');
+        downloadButton.type = 'button';
+        downloadButton.className = 'btn-secondary';
+        downloadButton.textContent = 'Download';
+        downloadButton.addEventListener('click', () => this.downloadClassFile(file.path, file.filename));
+        item.appendChild(downloadButton);
+        list.appendChild(item);
+      });
+      container.appendChild(list);
+    } catch (error) {
+      if (!container.isConnected || classId !== this.selectedClassId) return;
+      container.textContent = error.message || 'Unable to load class files.';
+    }
+  },
+
+  async uploadClassFiles(fileList) {
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
+    const input = document.getElementById('classwork-upload-input');
+    const button = document.getElementById('classwork-upload-button');
+    const status = document.getElementById('classwork-upload-status');
+    if (!this.ensureTeacherAccess(Auth.getCurrentUser())) return;
+
+    if (files.some((file) => file.size > 50 * 1024 * 1024)) {
+      if (status) status.textContent = 'Each file must be 50 MB or smaller.';
+      if (input) input.value = '';
+      return;
+    }
+
+    if (button) button.disabled = true;
+    if (status) status.textContent = `Uploading ${files.length} file${files.length === 1 ? '' : 's'}...`;
+    try {
+      for (const file of files) {
+        await FileTransferService.uploadBrowserFile(file, file.name, this.selectedClassId);
+      }
+      if (status) status.textContent = `${files.length} file${files.length === 1 ? '' : 's'} uploaded.`;
+      await this.loadClassFiles(this.selectedClassId);
+    } catch (error) {
+      if (status) status.textContent = error.message || 'Upload failed.';
+    } finally {
+      if (button) button.disabled = false;
+      if (input) input.value = '';
+    }
+  },
+
+  async downloadClassFile(filePath, filename) {
+    try {
+      const blob = await FileTransferService.downloadFileBlob(filePath, this.selectedClassId);
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = filename;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+    } catch (error) {
+      const status = document.getElementById('classwork-upload-status');
+      if (status) status.textContent = error.message || 'Download failed.';
+    }
+  },
+
+  formatFileSize(size) {
+    const bytes = Number(size) || 0;
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   },
 
   switchClassTab(tabName) {
@@ -354,6 +458,7 @@ const Classes = {
     if (selectedTab) {
       selectedTab.style.display = 'block';
     }
+    if (tabName === 'classwork') this.loadClassFiles(this.selectedClassId);
 
     // Update tab buttons
     const allButtons = content.querySelectorAll('.class-tab-btn');

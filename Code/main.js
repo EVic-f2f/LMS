@@ -65,9 +65,6 @@ const App = {
     // Restrict access by role
     this.applyAccessControl();
 
-    // Load student data
-    this.load();
-
     // Setup event listeners
     this.setupEventListeners();
     this.startAutoRefresh();
