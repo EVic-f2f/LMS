@@ -8,6 +8,8 @@ const App = {
   currentAccount: null,
   currentSchoolId: null,
   currentSchoolName: null,
+  refreshInterval: null,
+  refreshInProgress: false,
 
   async init() {
     await Auth.ensureDefaultAdmin();
@@ -68,6 +70,7 @@ const App = {
 
     // Setup event listeners
     this.setupEventListeners();
+    this.startAutoRefresh();
 
     // Initialize Classes module if available
     if (typeof Classes !== "undefined") {
@@ -144,6 +147,57 @@ const App = {
     if (sidebar) {
       sidebar.addEventListener('mouseenter', () => document.body.classList.add('sidebar-expanded'));
       sidebar.addEventListener('mouseleave', () => document.body.classList.remove('sidebar-expanded'));
+    }
+  },
+
+  startAutoRefresh() {
+    if (this.refreshInterval) clearInterval(this.refreshInterval);
+    this.refreshInterval = setInterval(() => this.refreshActiveView(), 15000);
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) this.refreshActiveView();
+    });
+    window.addEventListener("pageshow", () => this.refreshActiveView());
+  },
+
+  async refreshActiveView() {
+    if (document.hidden || this.refreshInProgress || !Auth.getCurrentUser()) return;
+
+    const activeElement = document.activeElement;
+    if (activeElement?.matches("input, textarea, select, [contenteditable='true']")) return;
+
+    this.refreshInProgress = true;
+    try {
+      switch (UI.currentTab) {
+        case "Classes":
+          await Classes.render();
+          break;
+        case "ClassDetail":
+          {
+          const activeClassTab = document.querySelector("#class-detail-content .class-tab-btn.active")?.dataset.tab;
+          await Classes.renderClassDetail();
+          if (activeClassTab) Classes.switchClassTab(activeClassTab);
+          break;
+          }
+        case "HD":
+          {
+          const activeHdSection = document.querySelector(".hd-section-tab.active")?.dataset.section;
+          await HD.render();
+          if (activeHdSection) {
+            document.querySelector(`.hd-section-tab[data-section="${activeHdSection}"]`)?.click();
+          }
+          break;
+          }
+        case "Settings":
+          await Settings.load();
+          break;
+        case "Account":
+          this.renderAccountContent();
+          break;
+      }
+    } catch (error) {
+      console.error("Automatic view refresh failed:", error);
+    } finally {
+      this.refreshInProgress = false;
     }
   },
 

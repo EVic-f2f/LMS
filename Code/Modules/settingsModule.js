@@ -23,6 +23,11 @@ const Settings = {
         const fallback = await fetch("/Code/config.json");
         this.config = await fallback.json();
       }
+      if (typeof App !== "undefined") {
+        App.config = this.config;
+        App.applyTheme();
+        App.updateSidebarInfo();
+      }
       this.render();
     } catch (e) {
 
@@ -357,11 +362,11 @@ const Settings = {
 
       if (response.ok) {
         this.config = settings;
-        alert("✓ Settings saved successfully! Reloading page...");
-        // Auto-reload page after 1 second to apply changes
-        setTimeout(() => {
-          window.location.reload();
-        }, 1000);
+        App.config = settings;
+        App.applyTheme();
+        App.updateSidebarInfo();
+        this.render();
+        alert("Settings saved successfully.");
       } else {
         alert("✗ Failed to save settings to server");
       }

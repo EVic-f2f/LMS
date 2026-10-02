@@ -7,10 +7,21 @@ const FileTransferService = {
     return "/api/files";
   },
 
-  async listFiles() {
+  getHeaders(classId) {
+    const token = localStorage.getItem(Auth.SESSION_KEY);
+    if (!token) throw new Error("Please sign in again before uploading or downloading files.");
+
+    const headers = { Authorization: `Bearer ${token}` };
+    const schoolId = (typeof App !== "undefined" && App.currentSchoolId) || Auth.getCurrentUser()?.school_id;
+    if (schoolId) headers["X-School-Id"] = schoolId;
+    if (classId) headers["X-Class-Id"] = classId;
+    return headers;
+  },
+
+  async listFiles(classId) {
     try {
       const url = `${this.getEndpoint()}?list=true`;
-      const response = await fetch(url, { method: "GET" });
+      const response = await fetch(url, { method: "GET", headers: this.getHeaders(classId) });
       if (!response.ok) throw new Error("Failed to list files");
       const payload = await response.json();
       return payload.files || [];
@@ -20,15 +31,22 @@ const FileTransferService = {
     }
   },
 
-  async uploadFile(filename, base64Data) {
+  async uploadFile(filename, fileData, classId) {
     try {
       const url = this.getEndpoint();
       const response = await fetch(url, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ filename, fileData: base64Data })
+        headers: {
+          ...this.getHeaders(classId),
+          "Content-Type": fileData.type || "application/octet-stream",
+          "X-File-Name": encodeURIComponent(filename)
+        },
+        body: fileData
       });
-      if (!response.ok) throw new Error("Failed to upload file");
+      if (!response.ok) {
+        const result = await response.json().catch(() => ({}));
+        throw new Error(result.error || "Failed to upload file");
+      }
       return await response.json();
     } catch (error) {
       console.error("FileTransferService.uploadFile error:", error);
@@ -36,34 +54,38 @@ const FileTransferService = {
     }
   },
 
-  async uploadBrowserFile(file, targetName) {
+  async uploadBrowserFile(file, targetName, classId) {
     if (!(file instanceof File)) {
       throw new Error("Expected a File object");
     }
 
     const filename = targetName || file.name;
-    const base64Data = await this._fileToBase64(file);
-    const normalized = base64Data.split(",")[1] || base64Data;
-    return this.uploadFile(filename, normalized);
+    return this.uploadFile(filename, file, classId);
   },
 
-  async downloadFile(filename) {
+  async downloadFile(filePath, classId) {
     try {
-      const url = `${this.getEndpoint()}?filename=${encodeURIComponent(filename)}&download=true`;
-      const response = await fetch(url, { method: "GET" });
-      if (!response.ok) throw new Error("Failed to download file");
-      return await response.json();
+      const url = `${this.getEndpoint()}?path=${encodeURIComponent(filePath)}&download=true`;
+      const response = await fetch(url, { method: "GET", headers: this.getHeaders(classId) });
+      if (!response.ok) {
+        const result = await response.json().catch(() => ({}));
+        throw new Error(result.error || "Failed to download file");
+      }
+      return await response.blob();
     } catch (error) {
       console.error("FileTransferService.downloadFile error:", error);
       throw error;
     }
   },
 
-  async deleteFile(filename) {
+  async deleteFile(filePath, classId) {
     try {
-      const url = `${this.getEndpoint()}?filename=${encodeURIComponent(filename)}`;
-      const response = await fetch(url, { method: "DELETE" });
-      if (!response.ok) throw new Error("Failed to delete file");
+      const url = `${this.getEndpoint()}?path=${encodeURIComponent(filePath)}`;
+      const response = await fetch(url, { method: "DELETE", headers: this.getHeaders(classId) });
+      if (!response.ok) {
+        const result = await response.json().catch(() => ({}));
+        throw new Error(result.error || "Failed to delete file");
+      }
       return await response.json();
     } catch (error) {
       console.error("FileTransferService.deleteFile error:", error);
@@ -71,28 +93,8 @@ const FileTransferService = {
     }
   },
 
-  async downloadFileBlob(filename) {
-    const payload = await this.downloadFile(filename);
-    if (!payload || !payload.fileData) {
-      throw new Error("No file data received");
-    }
-
-    const binary = atob(payload.fileData);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i += 1) {
-      bytes[i] = binary.charCodeAt(i);
-    }
-
-    return new Blob([bytes], { type: payload.mimeType || "application/octet-stream" });
-  },
-
-  _fileToBase64(file) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = () => reject(new Error("File reading failed"));
-      reader.readAsDataURL(file);
-    });
+  async downloadFileBlob(filePath, classId) {
+    return this.downloadFile(filePath, classId);
   }
 };
 

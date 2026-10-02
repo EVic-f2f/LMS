@@ -5,6 +5,7 @@
 const Auth = {
   USERS_KEY: "lmsUsers",
   CURRENT_USER_KEY: "lmsCurrentUser",
+  SESSION_KEY: "lmsSessionToken",
   defaultAdmin: {
     name: "Web Admin",
     email: "webadmin@lms.local",
@@ -251,6 +252,7 @@ const Auth = {
 
       const found = result.user;
       found.preferences = found.preferences || { autoLogin: true, notifications: true };
+      if (result.token) localStorage.setItem(this.SESSION_KEY, result.token);
 
       const currentUser = {
         name: found.name,
@@ -310,6 +312,7 @@ const Auth = {
   signOut() {
 
     this.clearCurrentUser();
+    localStorage.removeItem(this.SESSION_KEY);
     if (typeof App !== "undefined") {
       App.currentAccount = null;
     }

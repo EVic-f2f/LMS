@@ -359,9 +359,11 @@ const Classes = {
     const allButtons = content.querySelectorAll('.class-tab-btn');
     allButtons.forEach(btn => {
       if (btn.dataset.tab === tabName) {
+        btn.classList.add('active');
         btn.style.borderBottom = '3px solid #3498db';
         btn.style.color = '#3498db';
       } else {
+        btn.classList.remove('active');
         btn.style.borderBottom = '3px solid transparent';
         btn.style.color = '#999';
       }

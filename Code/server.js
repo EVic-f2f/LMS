@@ -24,6 +24,8 @@ fs.mkdirSync(filesFolder, { recursive: true });
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const SUPABASE_STORAGE_BUCKET = process.env.SUPABASE_STORAGE_BUCKET || "classwork-files";
+const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 
 
 function getSupabaseClientOrNull() {
@@ -137,8 +139,8 @@ async function saveUserData(updatedUsers) {
 
 function setCorsHeaders(res) {
     res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-File-Name, X-School-Id, X-Class-Id");
 }
 
 function sendJson(res, statusCode, data) {
@@ -153,6 +155,167 @@ function sendJson(res, statusCode, data) {
 
 function hashPassword(password) {
     return crypto.createHash("sha256").update(String(password)).digest("hex");
+}
+
+function getSessionSecret() {
+    const secret = process.env.SESSION_SECRET || SUPABASE_SERVICE_ROLE_KEY;
+    if (!secret) throw new Error("Set SESSION_SECRET or SUPABASE_SERVICE_ROLE_KEY to enable signed sessions.");
+    return secret;
+}
+
+function createSessionToken(email) {
+    const encodedClaims = Buffer.from(JSON.stringify({
+        email: String(email).toLowerCase(),
+        expiresAt: Date.now() + (7 * 24 * 60 * 60 * 1000)
+    })).toString("base64url");
+    const signature = crypto.createHmac("sha256", getSessionSecret()).update(encodedClaims).digest("base64url");
+    return `${encodedClaims}.${signature}`;
+}
+
+function getSessionEmail(req) {
+    const authorization = String(req.headers.authorization || "");
+    const token = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
+    const [encodedClaims, signature, extra] = token.split(".");
+    if (!encodedClaims || !signature || extra) {
+        const error = new Error("Sign in to access file storage.");
+        error.statusCode = 401;
+        throw error;
+    }
+
+    const expected = crypto.createHmac("sha256", getSessionSecret()).update(encodedClaims).digest();
+    let supplied;
+    try {
+        supplied = Buffer.from(signature, "base64url");
+    } catch {
+        supplied = Buffer.alloc(0);
+    }
+    if (expected.length !== supplied.length || !crypto.timingSafeEqual(expected, supplied)) {
+        const error = new Error("Invalid sign-in session.");
+        error.statusCode = 401;
+        throw error;
+    }
+
+    try {
+        const claims = JSON.parse(Buffer.from(encodedClaims, "base64url").toString("utf8"));
+        if (!claims.email || claims.expiresAt < Date.now()) throw new Error("Expired session");
+        return String(claims.email).toLowerCase();
+    } catch {
+        const error = new Error("Sign in again to access file storage.");
+        error.statusCode = 401;
+        throw error;
+    }
+}
+
+async function getStorageScope(req) {
+    const email = getSessionEmail(req);
+    const { data: user, error: userError } = await requireSupabase()
+        .from("users")
+        .select("id, email, status, school_id, enrolledClasses, taughtClasses")
+        .ilike("email", email)
+        .maybeSingle();
+    if (userError) throw userError;
+    if (!user) {
+        const error = new Error("User account not found.");
+        error.statusCode = 401;
+        throw error;
+    }
+
+    const requestedSchoolId = String(req.headers["x-school-id"] || "").trim();
+    let schoolId = requestedSchoolId || user.school_id;
+    if (requestedSchoolId && String(user.school_id) !== requestedSchoolId) {
+        const { data: membership, error: membershipError } = await supabase
+            .from("school_memberships")
+            .select("school_id")
+            .eq("user_id", user.id)
+            .eq("school_id", requestedSchoolId)
+            .eq("status", "active")
+            .maybeSingle();
+        if (membershipError) throw membershipError;
+        if (!membership) {
+            const error = new Error("You do not have access to this school.");
+            error.statusCode = 403;
+            throw error;
+        }
+        schoolId = membership.school_id;
+    }
+
+    if (!schoolId) {
+        const { data: membership, error: membershipError } = await supabase
+            .from("school_memberships")
+            .select("school_id")
+            .eq("user_id", user.id)
+            .eq("status", "active")
+            .limit(1)
+            .maybeSingle();
+        if (membershipError) throw membershipError;
+        schoolId = membership?.school_id;
+    }
+    if (!schoolId) {
+        const error = new Error("Join a school before using file storage.");
+        error.statusCode = 403;
+        throw error;
+    }
+
+    const classId = String(req.headers["x-class-id"] || "").trim();
+    const isAdministrator = ["Admin", "Administrator", "School Administrator"].includes(String(user.status));
+    if (!classId) {
+        return { user, schoolId, prefix: `schools/${schoolId}/users/${user.id}`, canWrite: true };
+    }
+    if (!/^[A-Za-z0-9_-]+$/.test(classId)) {
+        const error = new Error("Invalid class identifier.");
+        error.statusCode = 400;
+        throw error;
+    }
+
+    const ownsClass = (user.taughtClasses || []).some((classInfo) => String(classInfo.id) === classId);
+    const isEnrolled = (user.enrolledClasses || []).map(String).includes(classId);
+    if (!ownsClass && !isEnrolled && !isAdministrator) {
+        const error = new Error("You do not have access to this class.");
+        error.statusCode = 403;
+        throw error;
+    }
+    if (req.method === "POST" && !ownsClass && !isAdministrator) {
+        const error = new Error("Only the class teacher or a school administrator can upload class files.");
+        error.statusCode = 403;
+        throw error;
+    }
+    if (req.method === "DELETE" && !ownsClass && !isAdministrator) {
+        const error = new Error("Only the class teacher or a school administrator can delete class files.");
+        error.statusCode = 403;
+        throw error;
+    }
+
+    return {
+        user,
+        schoolId,
+        prefix: `schools/${schoolId}/classes/${classId}`,
+        canWrite: ownsClass || isAdministrator
+    };
+}
+
+function readRequestBuffer(req, maxBytes) {
+    return new Promise((resolve, reject) => {
+        const chunks = [];
+        let size = 0;
+        let exceeded = false;
+        req.on("data", (chunk) => {
+            if (exceeded) return;
+            size += chunk.length;
+            if (size > maxBytes) {
+                exceeded = true;
+                const error = new Error(`Files must be ${Math.floor(maxBytes / (1024 * 1024))} MB or smaller.`);
+                error.statusCode = 413;
+                reject(error);
+                req.resume();
+                return;
+            }
+            chunks.push(chunk);
+        });
+        req.on("end", () => {
+            if (!exceeded) resolve(Buffer.concat(chunks));
+        });
+        req.on("error", reject);
+    });
 }
 
 function getSchoolMembershipRole(status) {
@@ -304,7 +467,11 @@ function handleRequest(req, res) {
                     const now = new Date().toISOString();
                     user.lastSignedIn = now;
                     await saveUserData(users);
-                    sendJson(res, 200, { success: true, user: sanitizeUserForClient(user) });
+                    sendJson(res, 200, {
+                        success: true,
+                        user: sanitizeUserForClient(user),
+                        token: createSessionToken(user.email)
+                    });
                 } catch (err) {
                     sendJson(res, 400, { success: false, error: err.message });
                 }
@@ -1205,7 +1372,6 @@ function handleRequest(req, res) {
 
 
     if (url.pathname === "/api/files") {
-
         setCorsHeaders(res);
         if (req.method === "OPTIONS") {
             res.writeHead(204);
@@ -1213,61 +1379,108 @@ function handleRequest(req, res) {
             return;
         }
 
-        if (req.method === "GET") {
-            const filename = url.searchParams.get("filename");
-            const download = url.searchParams.get("download");
-            if (filename && download === "true") {
-                try {
-                    const fileData = readFileAsBase64(filename);
-                    sendJson(res, 200, { success: true, filename, fileData });
-                } catch (err) {
-                    sendJson(res, 404, { success: false, error: err.message });
+        const respondWithError = (error) => {
+            if (res.headersSent) return;
+            sendJson(res, error.statusCode || 500, { success: false, error: error.message || "File storage failed." });
+        };
+
+        if (!["GET", "POST", "DELETE"].includes(req.method)) {
+            sendJson(res, 405, { error: "Method not allowed" });
+            return;
+        }
+
+        (async () => {
+            if (!SUPABASE_SERVICE_ROLE_KEY) {
+                const error = new Error("File storage requires SUPABASE_SERVICE_ROLE_KEY in the server environment.");
+                error.statusCode = 503;
+                throw error;
+            }
+            const scope = await getStorageScope(req);
+            const bucket = requireSupabase().storage.from(SUPABASE_STORAGE_BUCKET);
+            const objectPath = url.searchParams.get("path");
+            const objectName = objectPath?.startsWith(`${scope.prefix}/`)
+                ? objectPath.slice(scope.prefix.length + 1)
+                : "";
+            const validObjectPath = Boolean(objectName) && !objectName.includes("/") && !objectName.includes("..") && objectName !== ".";
+
+            if (req.method === "GET" && objectPath && url.searchParams.get("download") === "true") {
+                if (!validObjectPath) {
+                    const error = new Error("You do not have access to this file.");
+                    error.statusCode = 403;
+                    throw error;
                 }
+                const { data, error } = await bucket.download(objectPath);
+                if (error) throw error;
+                const buffer = Buffer.from(await data.arrayBuffer());
+                res.writeHead(200, {
+                    "Content-Type": data.type || "application/octet-stream",
+                    "Content-Length": buffer.length,
+                    "Content-Disposition": `attachment; filename="download"; filename*=UTF-8''${encodeURIComponent(path.basename(objectPath).replace(/^[^_]+__/, ""))}`,
+                    "Cache-Control": "private, no-store"
+                });
+                res.end(buffer);
                 return;
             }
 
-            const files = listStoredFiles();
-            sendJson(res, 200, { success: true, files });
-            return;
-        }
-
-        if (req.method === "POST") {
-            let body = "";
-            req.on("data", (chunk) => {
-                body += chunk.toString();
-            });
-            req.on("end", () => {
-                try {
-                    const payload = JSON.parse(body);
-                    const { filename, fileData } = payload;
-                    if (!filename || !fileData) {
-                        throw new Error("Missing filename or fileData");
-                    }
-                    const result = saveFileFromBase64(filename, fileData);
-                    sendJson(res, 200, { success: true, ...result });
-                } catch (err) {
-                    sendJson(res, 400, { success: false, error: err.message });
-                }
-            });
-            return;
-        }
-
-        if (req.method === "DELETE") {
-            const filename = url.searchParams.get("filename");
-            if (!filename) {
-                sendJson(res, 400, { success: false, error: "Missing filename" });
+            if (req.method === "GET") {
+                const { data, error } = await bucket.list(scope.prefix, {
+                    limit: 100,
+                    sortBy: { column: "created_at", order: "desc" }
+                });
+                if (error) throw error;
+                const files = (data || []).filter((item) => item.id).map((item) => ({
+                    filename: item.name.includes("__") ? item.name.split("__").slice(1).join("__") : item.name,
+                    path: `${scope.prefix}/${item.name}`,
+                    size: item.metadata?.size || 0,
+                    mimeType: item.metadata?.mimetype || "application/octet-stream",
+                    createdAt: item.created_at || null
+                }));
+                sendJson(res, 200, { success: true, files });
                 return;
             }
-            try {
-                deleteStoredFile(filename);
-                sendJson(res, 200, { success: true, filename });
-            } catch (err) {
-                sendJson(res, 500, { success: false, error: err.message });
-            }
-            return;
-        }
 
-        sendJson(res, 405, { error: "Method not allowed" });
+            if (req.method === "POST") {
+                let filename = "";
+                try {
+                    filename = decodeURIComponent(String(req.headers["x-file-name"] || "").trim());
+                } catch {
+                    const error = new Error("Invalid file name encoding.");
+                    error.statusCode = 400;
+                    throw error;
+                }
+                const safeName = sanitizeFileName(filename);
+                const buffer = await readRequestBuffer(req, MAX_UPLOAD_BYTES);
+                if (!buffer.length) {
+                    const error = new Error("The uploaded file is empty.");
+                    error.statusCode = 400;
+                    throw error;
+                }
+                const contentType = String(req.headers["content-type"] || "application/octet-stream");
+                const safeContentType = /^[\w.+-]+\/[\w.+-]+$/.test(contentType) ? contentType : "application/octet-stream";
+                const storagePath = `${scope.prefix}/${crypto.randomUUID()}__${safeName}`;
+                const { error } = await bucket.upload(storagePath, buffer, {
+                    contentType: safeContentType,
+                    upsert: false
+                });
+                if (error) throw error;
+                sendJson(res, 201, { success: true, filename: safeName, path: storagePath, size: buffer.length });
+                return;
+            }
+
+            if (!objectPath) {
+                const error = new Error("Missing file path.");
+                error.statusCode = 400;
+                throw error;
+            }
+            if (!validObjectPath) {
+                const error = new Error("You do not have access to this file.");
+                error.statusCode = 403;
+                throw error;
+            }
+            const { error } = await bucket.remove([objectPath]);
+            if (error) throw error;
+            sendJson(res, 200, { success: true, path: objectPath });
+        })().catch(respondWithError);
         return;
     }
 

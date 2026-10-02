@@ -5,9 +5,11 @@
 const UI = {
   selectedRow: null,
   selectedColumn: -1,
+  currentTab: "Home",
 
   openTab(evt, tabName) {
     const normalizedTabName = tabName === "Student" ? "Classes" : tabName;
+    this.currentTab = normalizedTabName;
 
     if (normalizedTabName === "Settings" && !Auth.isTeacherOrHigher()) {
       alert("Only teachers and administrators can access Settings.");
