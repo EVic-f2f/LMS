@@ -148,17 +148,21 @@ const Auth = {
   getAllowedStatuses() {
     const user = this.getCurrentUser();
     if (user && user.status === "Administrator") {
-      return ["Student", "Teacher", "Administrator", "Guest"];
+      return ["Student", "Teacher", "School Administrator", "Administrator", "Guest"];
     }
     return ["Student", "Guest"];
   },
 
   isTeacherOrHigher(user = this.getCurrentUser()) {
-    return user && (user.status === "Teacher" || user.status === "Administrator");
+    return user && ["Teacher", "School Administrator", "Administrator"].includes(user.status);
   },
 
   isAdministrator(user = this.getCurrentUser()) {
     return user && user.status === "Administrator";
+  },
+
+  isSchoolAdministrator(user = this.getCurrentUser()) {
+    return user && ["School Administrator", "Administrator"].includes(user.status);
   },
 
   async registerUser(profile) {
@@ -264,6 +268,9 @@ const Auth = {
       this.saveCurrentUser(currentUser);
       return currentUser;
     } catch (error) {
+      if (serverError) {
+        throw serverError;
+      }
       console.warn("Server auth failed, falling back to local user store:", error.message || error);
       const found = await this.findUser(lookupEmail);
       if (!found) {
@@ -301,6 +308,7 @@ const Auth = {
   },
 
   signOut() {
+
     this.clearCurrentUser();
     if (typeof App !== "undefined") {
       App.currentAccount = null;
@@ -308,9 +316,36 @@ const Auth = {
     if (window.location.pathname.endsWith("index.html") || window.location.pathname === "/") {
       window.location.href = "sign-in.html";
     }
+  },
+  async createOrAssignSchoolForUser({ schoolName }) {
+    // Creates a school + assigns it to the user's record.
+    // This is used during sign-up.
+    const currentUser = this.getCurrentUser();
+    if (!currentUser?.email) {
+      throw new Error("No signed-in user to assign school.");
+    }
+    const email = currentUser.email;
+
+    const hostname = window.location.hostname;
+    const port = window.location.port || 3000;
+    const url = `http://${hostname}:${port}/api/schools/create-and-assign`;
+
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, schoolName })
+    });
+
+    if (!res.ok) {
+      const json = await res.json().catch(() => ({}));
+      throw new Error(json?.error || "Failed to create/assign school.");
+    }
+
+    return await res.json().catch(() => ({}));
   }
 };
 
 if (typeof module !== "undefined" && module.exports) {
   module.exports = Auth;
 }
+

@@ -8,6 +8,7 @@ const IntroVideo = {
   pausedAtFive: false,
   loadComplete: false,
   pauseTimer: null,
+  closeFallbackTimer: null,
 
   init() {
     this.overlay = document.getElementById("intro-video-overlay");
@@ -44,6 +45,13 @@ const IntroVideo = {
         // Silent fail for autoplay policies; video will still show if playable.
       });
     }
+
+    if (this.closeFallbackTimer) {
+      clearTimeout(this.closeFallbackTimer);
+    }
+    this.closeFallbackTimer = window.setTimeout(() => {
+      this.finish();
+    }, 12000);
 
     this.pauseTimer = window.setTimeout(() => {
       this.pauseForLoad();
@@ -95,11 +103,23 @@ const IntroVideo = {
   },
 
   finish() {
-    if (!this.overlay) {
-      return;
+    if (this.closeFallbackTimer) {
+      clearTimeout(this.closeFallbackTimer);
+      this.closeFallbackTimer = null;
     }
 
-    this.overlay.classList.add("hidden");
+    if (this.pauseTimer) {
+      clearTimeout(this.pauseTimer);
+      this.pauseTimer = null;
+    }
+
+    if (this.video && !this.video.paused) {
+      this.video.pause();
+    }
+
+    if (this.overlay) {
+      this.overlay.classList.add("hidden");
+    }
   },
 
   setupEvents() {

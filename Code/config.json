@@ -1,6 +1,6 @@
 {
-  "schoolName": "Belmont Academy",
-  "location": "Bluefields, Westmoreland, Jamaica",
+  "schoolName": "Your School",
+  "location": "",
   "apiEndpoint": "http://localhost:3000/api/students",
   "gradeFields": [
     "Test 1",

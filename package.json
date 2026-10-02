@@ -4,7 +4,10 @@
   "private": true,
   "main": "Code/server.js",
   "scripts": {
-    "start": "node -r dotenv/config Code/server.js"
+    "start": "node -r dotenv/config Code/server.js",
+    "poststart": "node Code/Helpers/open_local_browser.js",
+    "db:migrate-normalized": "node Code/Helpers/migrate_normalized_data.js",
+    "db:migrate-normalized:check": "node Code/Helpers/migrate_normalized_data.js --dry-run"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.1",

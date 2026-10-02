@@ -14,8 +14,8 @@ const UI = {
       return;
     }
 
-    if (normalizedTabName === "HD" && !Auth.isAdministrator()) {
-      alert("Only administrators can access HD.");
+    if (normalizedTabName === "HD" && !Auth.isSchoolAdministrator()) {
+      alert("Only school administrators can access HD.");
       return;
     }
 

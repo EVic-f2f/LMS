@@ -4,7 +4,7 @@
 
 const Account = {
   defaultStatus: "Student",
-  statuses: ["Student", "Teacher", "Administrator", "Guest"],
+  statuses: ["Student", "Teacher", "School Administrator", "Administrator", "Guest"],
   account: null,
 
   load() {
@@ -26,14 +26,14 @@ const Account = {
     };
 
     Storage.saveAccount(this.account);
-    App.currentAccount = this.account;
+    if (typeof App !== "undefined") App.currentAccount = this.account;
     return this.account;
   },
 
   signOut() {
     Auth.signOut();
     this.account = null;
-    App.currentAccount = null;
+    if (typeof App !== "undefined") App.currentAccount = null;
     this.render();
   },
 
@@ -48,6 +48,11 @@ const Account = {
     }
 
     container.innerHTML = "";
+    const vicHomeLink = document.createElement("a");
+    vicHomeLink.href = "vic-home.html";
+    vicHomeLink.textContent = "Back to VIC systems home";
+    vicHomeLink.style.cssText = "display: inline-block; margin-bottom: 16px; color: var(--primary); font-weight: 700;";
+    container.appendChild(vicHomeLink);
     this.renderProfile(container);
   },
 

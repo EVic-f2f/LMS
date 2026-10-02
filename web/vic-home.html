@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VIC Home</title>
+  <link rel="stylesheet" href="/styles/main.css" />
+  <script src="/Code/Modules/vicThemeModule.js"></script>
+</head>
+<body class="vic-home-page">
+  <header class="topbar">
+    <div class="topbar-brand" id="vic-topbar-brand">VIC systems</div>
+    <nav class="topbar-actions" id="vic-topbar-actions" aria-label="VIC account actions"></nav>
+  </header>
+
+  <a class="vic-hd-float" id="vic-hd-float" href="Web_monitor.html" aria-label="Open Web Administrator panel">
+    <span class="vic-hd-label">Web Administrator</span>
+    <strong>HD</strong>
+  </a>
+
+  <a class="vic-account-float" id="vic-account-float" href="account.html" aria-label="Open account">
+    <span class="vic-hd-label">Account</span>
+    <strong>AC</strong>
+  </a>
+
+  <main class="main vic-home-main">
+    <h2>Welcome to VIC systems</h2>
+
+    <div class="themed-panel" style="margin-top: 8px;">
+      <h3>VIC systems</h3>
+      <p>
+        VIC systems is a connected space for schools, teachers, and students to manage learning
+        information in one place.
+      </p>
+      <p style="opacity:0.85; margin-top: 10px;">
+        [Placeholder: add the VIC systems introduction, school community details, and featured
+        information here.]
+      </p>
+
+      <p id="vic-home-message" style="margin-top: 10px; font-weight: 600; color: rgba(0,0,0,0.65);"></p>
+    </div>
+  </main>
+
+  <script>
+    (function () {
+      const actions = document.getElementById('vic-topbar-actions');
+      const msg = document.getElementById('vic-home-message');
+      const hdButton = document.getElementById('vic-hd-float');
+      const accountButton = document.getElementById('vic-account-float');
+      let openSchoolButton = null;
+      let userSchools = [];
+      let membershipsLoaded = false;
+
+      function addAction(label, target) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'topbar-action';
+        button.textContent = label;
+        button.addEventListener('click', () => { window.location.href = target; });
+        actions.appendChild(button);
+      }
+
+      try {
+        const currentUser = JSON.parse(localStorage.getItem('lmsCurrentUser') || 'null');
+        if (currentUser?.email) {
+          addAction('Join School', 'join-school.html');
+          addAction('Create School', 'create-school.html');
+          openSchoolButton = document.createElement('button');
+          openSchoolButton.type = 'button';
+          openSchoolButton.className = 'topbar-action';
+          openSchoolButton.textContent = 'Open School';
+          openSchoolButton.setAttribute('aria-haspopup', 'menu');
+          openSchoolButton.setAttribute('aria-expanded', 'false');
+          actions.appendChild(openSchoolButton);
+          openSchoolButton.onclick = () => {
+            if (!membershipsLoaded) {
+              showSchoolMenu([], openSchoolButton, 'Loading your schools…');
+            } else if (userSchools.length === 1) {
+              window.location.href = `main.html?schoolId=${encodeURIComponent(userSchools[0].id)}`;
+            } else {
+              showSchoolMenu(userSchools, openSchoolButton);
+            }
+          };
+          fetch(`/api/schools/for-user?email=${encodeURIComponent(currentUser.email)}`)
+            .then(response => response.json().then(data => ({ response, data })))
+            .then(({ response, data }) => {
+              if (!response.ok || !data.success) throw new Error(data.error || 'Could not load schools');
+              userSchools = data.schools || [];
+              membershipsLoaded = true;
+            })
+            .catch(error => {
+              membershipsLoaded = true;
+              console.warn('Could not load school memberships:', error);
+            });
+          if (!['Administrator', 'Admin'].includes(currentUser.status)) {
+            hdButton.remove();
+          }
+          const name = currentUser.name ? `, ${currentUser.name}` : '';
+          msg.textContent = `Signed in${name}. Join an existing school or create a new one.`;
+        } else {
+          addAction('Sign In', 'sign-in.html');
+          addAction('Sign Up', 'sign-up.html');
+          hdButton.remove();
+          accountButton.remove();
+          msg.textContent = 'Sign in or sign up to get started.';
+        }
+      } catch (e) {
+        addAction('Sign In', 'sign-in.html');
+        addAction('Sign Up', 'sign-up.html');
+        hdButton.remove();
+        accountButton.remove();
+      }
+
+      function showSchoolMenu(schools, anchor, emptyMessage = '') {
+        document.querySelector('.vic-school-menu')?.remove();
+        const menu = document.createElement('div');
+        menu.className = 'vic-school-menu';
+        menu.setAttribute('role', 'menu');
+        schools.forEach(school => {
+          const item = document.createElement('button');
+          item.type = 'button';
+          item.className = 'vic-school-menu-item';
+          item.textContent = school.name;
+          item.addEventListener('click', () => {
+            window.location.href = `main.html?schoolId=${encodeURIComponent(school.id)}`;
+          });
+          menu.appendChild(item);
+        });
+        if (!schools.length) {
+          const empty = document.createElement('p');
+          empty.className = 'vic-school-menu-empty';
+          empty.textContent = emptyMessage || 'No schools are linked to your account yet.';
+          menu.appendChild(empty);
+          if (!emptyMessage) {
+            [['Join School', 'join-school.html'], ['Create School', 'create-school.html']].forEach(([label, target]) => {
+              const action = document.createElement('button');
+              action.type = 'button';
+              action.className = 'vic-school-menu-item';
+              action.textContent = label;
+              action.addEventListener('click', () => { window.location.href = target; });
+              menu.appendChild(action);
+            });
+          }
+        }
+        const title = document.createElement('div');
+        title.className = 'vic-school-menu-title';
+        title.textContent = 'Open a school';
+        menu.prepend(title);
+        document.body.appendChild(menu);
+        const bounds = anchor.getBoundingClientRect();
+        menu.style.top = `${bounds.bottom + 8}px`;
+        menu.style.right = `${Math.max(12, window.innerWidth - bounds.right)}px`;
+        anchor.setAttribute('aria-expanded', 'true');
+        const closeMenu = event => {
+          if (!menu.contains(event.target) && event.target !== anchor) {
+            menu.remove();
+            anchor.setAttribute('aria-expanded', 'false');
+            document.removeEventListener('click', closeMenu);
+          }
+        };
+        const closeOnEscape = event => {
+          if (event.key === 'Escape') {
+            menu.remove();
+            anchor.setAttribute('aria-expanded', 'false');
+            document.removeEventListener('click', closeMenu);
+            document.removeEventListener('keydown', closeOnEscape);
+            anchor.focus();
+          }
+        };
+        setTimeout(() => document.addEventListener('click', closeMenu), 0);
+        document.addEventListener('keydown', closeOnEscape);
+      }
+    })();
+  </script>
+</body>
+</html>
+

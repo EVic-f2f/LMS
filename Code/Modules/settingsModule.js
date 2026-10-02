@@ -7,45 +7,112 @@ const Settings = {
 
   async load() {
     try {
-      const response = await fetch("Code/config.json");
-      this.config = await response.json();
+      const currentUser = (typeof App !== "undefined" && App.currentAccount) ? App.currentAccount : null;
+      const email = currentUser?.email;
+
+      if (!email) throw new Error("No signed-in user");
+
+      const url = `/api/schools/by-user?email=${encodeURIComponent(email)}`;
+
+      const response = await fetch(url);
+      const json = await response.json();
+
+      if (response.ok && json?.config_json) {
+        this.config = json.config_json;
+      } else {
+        const fallback = await fetch("/Code/config.json");
+        this.config = await fallback.json();
+      }
       this.render();
     } catch (e) {
+
       console.error("Failed to load config:", e);
-      document.getElementById("settings-content").innerHTML = "<p style='color: red;'>Failed to load settings</p>";
+      const container = document.getElementById("settings-content");
+      if (container) {
+        container.innerHTML = `<p style='color: red;'>Failed to load settings: ${this.escapeHtml(e.message)}</p>`;
+      }
     }
+  },
+
+  escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, (character) => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;"
+    })[character]);
   },
 
   render() {
     const container = document.getElementById("settings-content");
-    container.innerHTML = "";
+    if (!container) return;
+    const config = this.config || {};
+    const theme = config.theme || {};
+    const fields = Array.isArray(config.gradeFields) ? config.gradeFields : [];
 
-    const form = document.createElement("form");
-    form.id = "settings-form";
-    form.style.cssText = "display: grid; gap: 20px;";
+    container.innerHTML = `
+      <div class="settings-page">
+        <nav class="settings-tabs" aria-label="Settings sections">
+          <button type="button" class="settings-tab active" data-settings-tab="info">Info</button>
+          <button type="button" class="settings-tab" data-settings-tab="theme">Theme</button>
+          <button type="button" class="settings-tab" data-settings-tab="fields">Fields</button>
+          <button type="button" class="settings-tab" data-settings-tab="apis">APIs</button>
+        </nav>
+        <form id="settings-form" class="settings-form">
+          <section class="settings-panel active" data-settings-panel="info">
+            <h3>School Information</h3>
+            ${this.settingInput("School Name", "schoolName", config.schoolName || "")}
+            ${this.settingInput("Location", "location", config.location || "")}
+          </section>
+          <section class="settings-panel" data-settings-panel="theme">
+            <h3>School Theme</h3>
+            <p class="settings-help">These colors apply to this school's LMS.</p>
+            <div class="settings-color-grid">
+              ${["primary", "secondary", "accent", "success", "warning", "background", "text"].map((key) => this.settingColor(key, theme[key] || "")).join("")}
+            </div>
+          </section>
+          <section class="settings-panel" data-settings-panel="fields">
+            <h3>Grade Fields</h3>
+            <p class="settings-help">Use one field per line.</p>
+            <textarea class="settings-input settings-fields-input" data-setting-key="gradeFields" rows="8">${this.escapeHtml(fields.join("\\n"))}</textarea>
+          </section>
+          <section class="settings-panel" data-settings-panel="apis">
+            <h3>APIs</h3>
+            ${this.settingInput("Student API Endpoint", "apiEndpoint", config.apiEndpoint || "")}
+          </section>
+          <div class="settings-actions">
+            <button type="button" class="settings-save" id="settings-save">Save Settings</button>
+            <button type="button" class="settings-reload" id="settings-reload">Reload</button>
+          </div>
+        </form>
+      </div>`;
 
-    this.renderObject(this.config, form, "");
+    container.querySelectorAll(".settings-tab").forEach((tab) => {
+      tab.addEventListener("click", () => {
+        container.querySelectorAll(".settings-tab").forEach((item) => item.classList.remove("active"));
+        container.querySelectorAll(".settings-panel").forEach((panel) => panel.classList.remove("active"));
+        tab.classList.add("active");
+        container.querySelector(`[data-settings-panel="${tab.dataset.settingsTab}"]`)?.classList.add("active");
+      });
+    });
+    container.querySelectorAll("[data-theme-key]").forEach((colorInput) => {
+      colorInput.addEventListener("input", () => {
+        const textInput = container.querySelector(`[data-theme-text-key="${colorInput.dataset.themeKey}"]`);
+        if (textInput) textInput.value = colorInput.value;
+      });
+    });
+    container.querySelector("#settings-save").onclick = () => this.save();
+    container.querySelector("#settings-reload").onclick = () => this.load();
+  },
 
-    const buttonGroup = document.createElement("div");
-    buttonGroup.style.cssText = "display: flex; gap: 10px; margin-top: 20px;";
+  settingInput(label, key, value) {
+    return `<label class="settings-field"><span>${label}</span><input class="settings-input" type="text" data-setting-key="${key}" value="${this.escapeHtml(value)}"></label>`;
+  },
 
-    const saveBtn = document.createElement("button");
-    saveBtn.type = "button";
-    saveBtn.textContent = "💾 Save Settings";
-    saveBtn.onclick = () => this.save();
-    saveBtn.style.cssText = "padding: 12px 24px; background: linear-gradient(135deg, #27ae60 0%, #229954 100%); color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;";
-
-    const resetBtn = document.createElement("button");
-    resetBtn.type = "button";
-    resetBtn.textContent = "🔄 Reload";
-    resetBtn.onclick = () => this.load();
-    resetBtn.style.cssText = "padding: 12px 24px; background: linear-gradient(135deg, #3498db 0%, #2980b9 100%); color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;";
-
-    buttonGroup.appendChild(saveBtn);
-    buttonGroup.appendChild(resetBtn);
-    form.appendChild(buttonGroup);
-
-    container.appendChild(form);
+  settingColor(key, value) {
+    const normalized = this.isColorValue(value) ? this.normalizeColor(value) : "#000000";
+    return `<label class="settings-color-field"><span>${key}</span><input class="settings-color" type="color" data-theme-key="${key}" value="${normalized}"><input class="settings-input" type="text" data-theme-text-key="${key}" value="${this.escapeHtml(value)}"></label>`;
   },
 
   renderObject(obj, parent, prefix, depth = 0) {
@@ -255,18 +322,38 @@ const Settings = {
   },
 
   async save() {
-    const settings = this.getFormData();
+    const settings = JSON.parse(JSON.stringify(this.config || {}));
+    const form = document.getElementById("settings-form");
+    form.querySelectorAll("[data-setting-key]").forEach((input) => {
+      const key = input.dataset.settingKey;
+      settings[key] = key === "gradeFields"
+        ? input.value.split("\\n").map((value) => value.trim()).filter(Boolean)
+        : input.value;
+    });
+    settings.theme = { ...(settings.theme || {}) };
+    form.querySelectorAll("[data-theme-text-key]").forEach((input) => {
+      settings.theme[input.dataset.themeTextKey] = input.value.trim();
+    });
 
     try {
-      const hostname = window.location.hostname;
-      const port = window.location.port || 3000;
-      const url = `http://${hostname}:${port}/api/config`;
-      
+      const currentUser = (typeof App !== "undefined" && App.currentAccount) ? App.currentAccount : null;
+      const email = currentUser?.email;
+
+
+      if (!email) {
+        alert("✗ No signed-in user found. Please sign in again.");
+        return;
+      }
+
+      const url = "/api/schools/update-config";
+
       const response = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(settings)
+        body: JSON.stringify({ email, schoolId: App.currentSchoolId, config_json: settings })
       });
+
+
 
       if (response.ok) {
         this.config = settings;

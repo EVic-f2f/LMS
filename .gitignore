@@ -1,0 +1,11 @@
+node_modules/
+.env
+.env.*
+!.env.example
+
+Storage/database/
+
+Code/Helpers/Coms.txt
+Code/Helpers/open_local_browser.js
+
+TODO.md

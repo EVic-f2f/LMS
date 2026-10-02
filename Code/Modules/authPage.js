@@ -67,12 +67,21 @@ document.addEventListener("DOMContentLoaded", async () => {
 
       try {
         const user = await Auth.registerUser(profile);
+
+        // Create/assign school for the new user.
+        const schoolName = form.schoolName?.value?.trim();
+        if (schoolName) {
+          await Auth.createOrAssignSchoolForUser({ schoolName });
+        }
+
         Auth.saveCurrentUser(user);
-        window.location.href = "index.html";
+        // School assignment is optional; new accounts always start at VIC Home.
+        window.location.href = "vic-home.html";
       } catch (err) {
         message.textContent = err.message;
         message.style.color = "#c0392b";
       }
+
     });
   }
 });

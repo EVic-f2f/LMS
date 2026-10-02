@@ -6,6 +6,8 @@
 const App = {
   config: {},
   currentAccount: null,
+  currentSchoolId: null,
+  currentSchoolName: null,
 
   async init() {
     await Auth.ensureDefaultAdmin();
@@ -15,22 +17,45 @@ const App = {
       return;
     }
 
-    // Load configuration from the server's own address
+    // Load configuration from Supabase (per user school), with fallback to local Code/config.json
     try {
-      const hostname = window.location.hostname;
-      const port = window.location.port || 3000;
-      const response = await fetch(`http://${hostname}:${port}/Code/config.json`);
-      this.config = await response.json();
+      if (this.currentAccount?.email) {
+        const hostname = window.location.hostname;
+        const port = window.location.port || 3000;
+        const requestedSchoolId = new URLSearchParams(window.location.search).get("schoolId");
+        const schoolQuery = requestedSchoolId ? `&schoolId=${encodeURIComponent(requestedSchoolId)}` : "";
+        const url = `http://${hostname}:${port}/api/schools/by-user?email=${encodeURIComponent(this.currentAccount.email)}${schoolQuery}`;
+        const response = await fetch(url);
+        const json = await response.json();
+
+        if (response.ok && json?.config_json) {
+          this.config = json.config_json;
+          this.currentSchoolId = json.school?.id || requestedSchoolId || null;
+          this.updateBrandingFromSchool(json.school);
+        } else {
+          throw new Error("No school config from Supabase");
+        }
+      } else {
+        throw new Error("No currentAccount email");
+      }
     } catch (e) {
-      console.warn("Failed to load config, using defaults");
-      this.config = {
-        gradeFields: ["Test", "Test1", "Test2", "Test3", "Exam"],
-        defaultStudents: []
-      };
+      console.warn("Failed to load Supabase config, using local defaults");
+      try {
+        const hostname = window.location.hostname;
+        const port = window.location.port || 3000;
+        const response = await fetch(`http://${hostname}:${port}/Code/config.json`);
+        this.config = await response.json();
+      } catch {
+        this.config = {
+          gradeFields: ["Test", "Test1", "Test2", "Test3", "Exam"],
+          defaultStudents: []
+        };
+      }
     }
 
     // Apply theme colors
     this.applyTheme();
+
 
     // Update sidebar and header branding
     this.updateSidebarInfo();
@@ -53,8 +78,10 @@ const App = {
       Classes.init();
     }
 
-    // Set default tab
-    document.querySelector('.tablinks[data-tab="Home"]')?.click();
+    // Open a requested tab from public-page links, otherwise default to Home.
+    const requestedTab = window.location.hash.slice(1);
+    document.querySelector(`.tablinks[data-tab="${requestedTab}"]`)?.click()
+      || document.querySelector('.tablinks[data-tab="Home"]')?.click();
   },
 
   applyTheme() {
@@ -138,7 +165,7 @@ const App = {
 
     const hdTab = document.querySelector('.tablinks[data-tab="HD"]');
     if (hdTab) {
-      hdTab.style.display = Auth.isAdministrator(this.currentAccount) ? 'flex' : 'none';
+      hdTab.style.display = Auth.isSchoolAdministrator(this.currentAccount) ? 'flex' : 'none';
     }
 
     const topbarMeta = document.querySelector('.topbar-meta');
@@ -166,8 +193,28 @@ const App = {
     }
   },
 
+  updateBrandingFromSchool(school) {
+    if (!school) return;
+    if (school.name) this.currentSchoolName = school.name;
+
+    if (school.logo_url) {
+      const img = document.querySelector('.sidebar-logo img');
+      if (img) img.src = school.logo_url;
+    }
+
+    if (school.name) {
+      // update both sidebar and topbar branding
+      const sidebarName = document.getElementById("sidebar-school-name");
+      if (sidebarName) sidebarName.textContent = school.name;
+      const topbarBrand = document.querySelector(".topbar-brand");
+      if (topbarBrand) topbarBrand.textContent = school.name;
+    }
+  },
+
   updateSidebarInfo() {
-    const schoolName = this.config.schoolName || "Belmont Academy";
+    const schoolName = this.currentSchoolName || this.config.schoolName || "Your School";
+
+
     const sidebarName = document.getElementById("sidebar-school-name");
     if (sidebarName) {
       sidebarName.textContent = schoolName;
@@ -184,6 +231,9 @@ const App = {
     if (topbarBrand) {
       topbarBrand.textContent = schoolName;
     }
+    const homeWelcome = document.getElementById("home-welcome");
+    if (homeWelcome) homeWelcome.textContent = `Welcome to ${schoolName} LMS`;
+    document.title = `${schoolName} LMS`;
   },
 
   load() {

@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Create School | VIC LMS</title>
+  <link rel="stylesheet" href="/styles/main.css" />
+</head>
+<body class="auth-page sign-in public-vic">
+  <div class="auth-card">
+    <h1>Create School</h1>
+    <p style="opacity:0.9; margin-bottom:18px;">
+      Only signed-in users can create a school.
+    </p>
+
+    <form id="create-school-form">
+      <label>
+        School name
+        <input type="text" name="schoolName" required />
+      </label>
+
+      <label>
+        Logo URL (optional)
+        <input type="text" name="logoUrl" placeholder="https://... or blank" />
+      </label>
+
+      <label>
+        Address (optional)
+        <input type="text" name="location" placeholder="City, region, country" />
+      </label>
+
+      <label>
+        Theme primary color (hex)
+        <input type="text" name="themePrimary" placeholder="#3498db" />
+      </label>
+
+      <label>
+        Theme secondary color (hex)
+        <input type="text" name="themeSecondary" placeholder="#2c3e50" />
+      </label>
+
+      <label>
+        Grade fields (comma separated)
+        <textarea name="gradeFields" rows="3" placeholder="Test, Test1, Test2, Test3, Exam"></textarea>
+      </label>
+
+      <button type="submit">Create School</button>
+    </form>
+
+    <div id="create-school-message" class="message"></div>
+
+    <p class="helper">Back to <a href="vic-home.html">VIC Home</a></p>
+  </div>
+
+  <script src="/Code/Modules/storageModule.js"></script>
+  <script src="/Code/Modules/authModule.js"></script>
+  <script src="/Code/Modules/vicThemeModule.js"></script>
+  <script>
+    (function () {
+      const form = document.getElementById('create-school-form');
+      const message = document.getElementById('create-school-message');
+
+      function setMessage(text, isError) {
+        if (!message) return;
+        message.textContent = text || '';
+        message.style.color = isError ? '#c0392b' : '#27ae60';
+      }
+
+      async function getCurrentEmail() {
+        const currentUser = JSON.parse(localStorage.getItem('lmsCurrentUser') || 'null');
+        return currentUser?.email || null;
+      }
+
+      window.addEventListener('DOMContentLoaded', async () => {
+        const email = await getCurrentEmail();
+        if (!email) {
+          setMessage('Sign in first to create a school.', true);
+          const btn = form?.querySelector('button[type="submit"]');
+          if (btn) {
+            btn.disabled = true;
+            btn.style.opacity = '0.55';
+            btn.style.cursor = 'not-allowed';
+          }
+        }
+      });
+
+      form?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (!form) return;
+
+        setMessage('');
+
+        const currentUser = JSON.parse(localStorage.getItem('lmsCurrentUser') || 'null');
+        if (!currentUser?.email) {
+          setMessage('You must be signed in to create a school.', true);
+          return;
+        }
+
+        const email = currentUser.email;
+        const fd = new FormData(form);
+        const schoolName = String(fd.get('schoolName') || '').trim();
+        if (!schoolName) {
+          setMessage('School name is required.', true);
+          return;
+        }
+
+        const gradeFieldsRaw = String(fd.get('gradeFields') || '').trim();
+        const gradeFields = gradeFieldsRaw
+          ? gradeFieldsRaw.split(',').map(s => s.trim()).filter(Boolean)
+          : [];
+
+        const payload = {
+          email,
+          schoolName,
+          logoUrl: String(fd.get('logoUrl') || '').trim() || null,
+          location: String(fd.get('location') || '').trim() || null,
+          config_json: {
+            gradeFields,
+            theme: {
+              primary: String(fd.get('themePrimary') || '').trim() || undefined,
+              secondary: String(fd.get('themeSecondary') || '').trim() || undefined
+            }
+          }
+        };
+
+        try {
+          const hostname = window.location.hostname;
+          const port = window.location.port || 3000;
+          const url = `http://${hostname}:${port}/api/schools/create-and-assign`;
+
+          const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+
+          const json = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            throw new Error(json?.error || 'Failed to create school');
+          }
+
+          setMessage('School created. Redirecting...', false);
+          window.location.href = 'vic-home.html';
+        } catch (err) {
+          setMessage(err?.message || 'Failed to create school', true);
+        }
+      });
+    })();
+  </script>
+</body>
+</html>
+

@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Sign In | Belmont Academy LMS</title>
+  <title>Sign In | VIC systems</title>
   <link rel="stylesheet" href="/styles/main.css">
 </head>
-<body class="auth-page sign-in">
+<body class="auth-page sign-in public-vic">
   <div class="auth-card">
     <h1>Sign In</h1>
     <form id="sign-in-form">
@@ -27,8 +27,23 @@
     <p class="helper">New here? <a href="sign-up.html">Create an account</a></p>
   </div>
 
-  <script src="Code/Modules/storageModule.js"></script>
-  <script src="Code/Modules/authModule.js"></script>
-  <script src="Code/Modules/authPage.js"></script>
+  <script src="/Code/Modules/storageModule.js"></script>
+  <script src="/Code/Modules/authModule.js"></script>
+  <script src="/Code/Modules/authPage.js"></script>
+  <script src="/Code/Modules/vicThemeModule.js"></script>
+  <script>
+    (function () {
+      const signInForm = document.getElementById('sign-in-form');
+      const message = document.getElementById('sign-in-message');
+
+      window.addEventListener('DOMContentLoaded', async () => {
+        const submitBtn = signInForm?.querySelector('button[type="submit"]');
+        if (!submitBtn) return;
+        submitBtn.disabled = false;
+        submitBtn.style.opacity = '';
+        submitBtn.style.cursor = '';
+      });
+    })();
+  </script>
 </body>
 </html>

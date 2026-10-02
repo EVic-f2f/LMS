@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Account | VIC systems</title>
+  <link rel="stylesheet" href="/styles/main.css">
+  <script src="/Code/Modules/vicThemeModule.js"></script>
+</head>
+<body class="vic-home-page">
+  <header class="topbar">
+    <a class="topbar-brand" href="vic-home.html">VIC systems</a>
+    <nav class="topbar-actions" aria-label="Account navigation">
+      <a class="topbar-action" href="vic-home.html">Back</a>
+    </nav>
+  </header>
+  <main class="main vic-home-main">
+    <h2>Account</h2>
+    <section class="themed-panel" aria-label="Account profile">
+      <div id="account-content"></div>
+    </section>
+  </main>
+  <script src="/Code/Modules/storageModule.js"></script>
+  <script src="/Code/Modules/authModule.js"></script>
+  <script src="/Code/Modules/accountModule.js"></script>
+  <script>
+    Account.render();
+  </script>
+</body>
+</html>

@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Administrator | VIC systems</title>
+    <link rel="stylesheet" href="/styles/main.css">
+    <script src="/Code/Modules/vicThemeModule.js"></script>
+    <style>
+        .monitor-main { max-width: 1280px; }
+        .monitor-toolbar { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+        .monitor-toolbar input { flex: 1 1 320px; min-height: 42px; padding: 10px 12px; border: 1px solid #cbd5dc; border-radius: 6px; }
+        .monitor-button { min-height: 40px; padding: 9px 14px; border: 0; border-radius: 6px; background: var(--primary); color: white; font-weight: 700; cursor: pointer; }
+        .monitor-button.danger { background: #c0392b; }
+        .monitor-table-wrap { overflow-x: auto; }
+        .monitor-table { width: 100%; border-collapse: collapse; min-width: 720px; }
+        .monitor-table th, .monitor-table td { padding: 11px; border-bottom: 1px solid #e2e8ed; text-align: left; vertical-align: middle; }
+        .monitor-table th { background: #f3f6f8; color: var(--secondary); }
+        .monitor-table select { padding: 7px; border: 1px solid #cbd5dc; border-radius: 4px; }
+        .school-row { cursor: pointer; }
+        .school-row:hover { background: #f7fafb; }
+        .theme-editor { display: none; margin-top: 14px; padding: 16px; border: 1px solid #dce5ea; border-radius: 8px; background: #f8fbfc; }
+        .theme-editor.open { display: block; }
+        .theme-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+        .theme-fields label { display: grid; gap: 6px; font-weight: 700; color: var(--secondary); }
+        .theme-fields input { width: 100%; min-height: 38px; padding: 7px; border: 1px solid #cbd5dc; border-radius: 4px; }
+        .monitor-status { min-height: 22px; font-weight: 700; }
+    </style>
+</head>
+<body class="vic-home-page">
+    <header class="topbar">
+        <a class="topbar-brand" href="vic-home.html">VIC systems</a>
+        <div class="topbar-actions"><a class="topbar-action" href="main.html">LMS</a></div>
+    </header>
+    <main class="main monitor-main">
+        <h2>Web Administrator Panel</h2>
+        <div class="themed-panel">
+            <div class="monitor-toolbar"><input id="monitor-search" type="search" placeholder="Search schools, IDs, creators, names, emails, or usernames"><button class="monitor-button" id="monitor-search-button" type="button">Search</button></div>
+            <p class="monitor-status" id="monitor-status" role="status"></p>
+        </div>
+        <section class="themed-panel">
+            <h3>VIC Theme</h3>
+            <p>Controls public VIC pages and leaves the school theme for main.html separate.</p>
+            <div class="theme-fields" id="vic-theme-fields"></div>
+            <button class="monitor-button" id="save-vic-theme" type="button" style="margin-top:14px;">Save VIC Theme</button>
+        </section>
+        <section class="themed-panel">
+            <h3>Schools</h3>
+            <div class="monitor-table-wrap"><table class="monitor-table"><thead><tr><th>School</th><th>School ID</th><th>Creator / linked user</th><th>Action</th></tr></thead><tbody id="school-results"></tbody></table></div>
+            <div class="theme-editor" id="theme-editor"><h4 id="theme-editor-title">Edit school theme</h4><div class="theme-fields" id="theme-fields"></div><button class="monitor-button" id="save-theme" type="button" style="margin-top:14px;">Save School Theme</button></div>
+        </section>
+        <section class="themed-panel"><h3>All Users</h3><div class="monitor-table-wrap"><table class="monitor-table"><thead><tr><th>Name</th><th>Email / username</th><th>Role</th><th>School ID</th><th>Action</th></tr></thead><tbody id="user-results"></tbody></table></div></section>
+    </main>
+    <script>
+        (() => {
+            const admin = JSON.parse(localStorage.getItem('lmsCurrentUser') || 'null');
+            const status = document.getElementById('monitor-status');
+            const query = document.getElementById('monitor-search');
+            const schoolsBody = document.getElementById('school-results');
+            const usersBody = document.getElementById('user-results');
+            const editor = document.getElementById('theme-editor');
+            const fields = document.getElementById('theme-fields');
+            const vicFields = document.getElementById('vic-theme-fields');
+            let selectedSchool = null;
+            let themeConfig = null;
+            const themeKeys = ['primary', 'secondary', 'accent', 'success', 'warning', 'background', 'text'];
+            const button = (label, className = 'monitor-button') => { const el = document.createElement('button'); el.type = 'button'; el.textContent = label; el.className = className; return el; };
+            async function request(path, options) { const response = await fetch(path, options); const json = await response.json().catch(() => ({})); if (!response.ok || !json.success) throw new Error(json.error || 'Request failed'); return json; }
+            async function loadVicTheme() { const response = await fetch('/api/vic-theme'); const theme = await response.json(); vicFields.replaceChildren(); ['primary', 'secondary', 'accent', 'background', 'surface', 'text'].forEach(key => { const label = document.createElement('label'); label.textContent = key; const input = document.createElement('input'); input.type = 'text'; input.value = theme[key] || ''; input.dataset.vicThemeKey = key; label.appendChild(input); vicFields.appendChild(label); }); }
+            function renderUsers(users) {
+                usersBody.replaceChildren();
+                users.forEach(user => {
+                    const row = document.createElement('tr');
+                    [user.name, user.email].forEach(value => { const cell = document.createElement('td'); cell.textContent = value || ''; row.appendChild(cell); });
+                    const roleCell = document.createElement('td'); const select = document.createElement('select');
+                    ['Student', 'Teacher', 'Administrator', 'Guest'].forEach(role => select.appendChild(new Option(role, role, false, role === user.status)));
+                    select.addEventListener('change', async () => { try { await request('/api/admin/users/update', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ adminEmail: admin.email, email: user.email, status: select.value }) }); status.textContent = 'Role updated.'; } catch (error) { status.textContent = error.message; select.value = user.status; } });
+                    roleCell.appendChild(select); row.appendChild(roleCell);
+                    const schoolCell = document.createElement('td'); schoolCell.textContent = user.school_id || 'Unassigned'; row.appendChild(schoolCell);
+                    const actionCell = document.createElement('td'); const deleteButton = button('Delete', 'monitor-button danger'); deleteButton.disabled = user.email === admin.email;
+                    deleteButton.addEventListener('click', async () => { if (!confirm(`Delete ${user.email}? This cannot be undone.`)) return; try { await request('/api/admin/users/delete', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ adminEmail: admin.email, email: user.email }) }); status.textContent = 'User deleted.'; load(); } catch (error) { status.textContent = error.message; } });
+                    actionCell.appendChild(deleteButton); row.appendChild(actionCell); usersBody.appendChild(row);
+                });
+            }
+            function renderSchools(schools) {
+                schoolsBody.replaceChildren();
+                schools.forEach(school => { const row = document.createElement('tr'); row.className = 'school-row'; [school.name, school.id, school.creator ? `${school.creator.name || ''} (${school.creator.email || ''})` : 'No linked creator'].forEach(value => { const cell = document.createElement('td'); cell.textContent = value; row.appendChild(cell); }); const actionCell = document.createElement('td'); const edit = button('Edit theme'); edit.addEventListener('click', event => { event.stopPropagation(); openEditor(school); }); actionCell.appendChild(edit); row.appendChild(actionCell); row.addEventListener('click', () => openEditor(school)); schoolsBody.appendChild(row); });
+            }
+            function openEditor(school) { selectedSchool = school; themeConfig = {...(school.config_json || {})}; document.getElementById('theme-editor-title').textContent = `Edit theme: ${school.name}`; fields.replaceChildren(); const theme = themeConfig.theme || {}; themeKeys.forEach(key => { const label = document.createElement('label'); label.textContent = key; const input = document.createElement('input'); input.type = 'text'; input.value = theme[key] || ''; input.dataset.themeKey = key; label.appendChild(input); fields.appendChild(label); }); editor.classList.add('open'); editor.scrollIntoView({behavior:'smooth', block:'nearest'}); }
+            document.getElementById('save-theme').addEventListener('click', async () => { if (!selectedSchool) return; const theme = {}; fields.querySelectorAll('[data-theme-key]').forEach(input => { if (input.value.trim()) theme[input.dataset.themeKey] = input.value.trim(); }); try { await request('/api/admin/schools/update', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({adminEmail:admin.email, schoolId:selectedSchool.id, config_json:{...themeConfig, theme}}) }); status.textContent = 'School theme saved.'; load(); } catch (error) { status.textContent = error.message; } });
+            document.getElementById('save-vic-theme').addEventListener('click', async () => { const theme = {}; vicFields.querySelectorAll('[data-vic-theme-key]').forEach(input => { if (input.value.trim()) theme[input.dataset.vicThemeKey] = input.value.trim(); }); try { await request('/api/admin/vic-theme', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({adminEmail:admin.email, theme}) }); status.textContent = 'VIC theme saved. Refresh public pages to apply it.'; } catch (error) { status.textContent = error.message; } });
+            async function load() { if (!admin?.email || !['Administrator', 'Admin'].includes(admin.status)) { status.textContent = 'Administrator access required.'; return; } try { const data = await request(`/api/admin/search?adminEmail=${encodeURIComponent(admin.email)}&q=${encodeURIComponent(query.value)}`); renderSchools(data.schools); renderUsers(data.users); status.textContent = `${data.schools.length} schools, ${data.users.length} users`; } catch (error) { status.textContent = error.message; } }
+            document.getElementById('monitor-search-button').addEventListener('click', load); query.addEventListener('keydown', event => { if (event.key === 'Enter') load(); }); loadVicTheme(); load();
+        })();
+    </script>
+</body>
+</html>

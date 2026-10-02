@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Join School | VIC systems</title>
+  <link rel="stylesheet" href="/styles/main.css">
+  <script src="/Code/Modules/vicThemeModule.js"></script>
+  <style>
+    .join-toolbar { display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
+    .join-toolbar input { flex:1 1 260px; min-height:40px; padding:9px 12px; border:1px solid #cbd5dc; border-radius:6px; }
+    .school-list { display:grid; gap:10px; margin-top:18px; }
+    .school-option { display:flex; align-items:center; gap:12px; padding:14px; border:1px solid #d7e0e5; border-radius:8px; background:#fff; cursor:pointer; }
+    .school-option:hover, .school-option:has(input:checked) { border-color:var(--primary); background:#f3f8fb; }
+    .school-option input { width:18px; height:18px; }
+    .join-button { margin-top:18px; min-height:42px; padding:10px 16px; border:0; border-radius:6px; background:var(--primary); color:#fff; font-weight:700; cursor:pointer; }
+    .join-message { min-height:24px; margin-top:12px; font-weight:700; }
+  </style>
+</head>
+<body class="vic-home-page">
+  <header class="topbar">
+    <a class="topbar-brand" href="vic-home.html">VIC systems</a>
+    <div class="topbar-actions">
+      <a class="topbar-action" href="vic-home.html">Back</a>
+      <a class="topbar-action" id="join-sign-in-link" href="sign-in.html">Sign In</a>
+      <a class="topbar-action" id="join-account-link" href="account.html" hidden>Account</a>
+    </div>
+  </header>
+  <main class="main vic-home-main">
+    <h2>Join a school</h2>
+    <div class="themed-panel">
+      <p>Select a school to send a join request to its School Administrator.</p>
+      <div class="join-toolbar" style="margin-top:16px;"><input id="school-search" type="search" placeholder="Search schools by name"><button class="join-button" id="refresh-schools" type="button">Refresh</button></div>
+      <div class="school-list" id="school-list"></div>
+      <button class="join-button" id="request-join" type="button">Request to Join</button>
+      <p class="join-message" id="join-message" role="status"></p>
+    </div>
+  </main>
+  <script>
+    (() => {
+      const user = JSON.parse(localStorage.getItem('lmsCurrentUser') || 'null');
+      const list = document.getElementById('school-list');
+      const search = document.getElementById('school-search');
+      const message = document.getElementById('join-message');
+      const joinButton = document.getElementById('request-join');
+      const signInLink = document.getElementById('join-sign-in-link');
+      const accountLink = document.getElementById('join-account-link');
+      let schools = [];
+      if (user?.email) {
+        signInLink.hidden = true;
+        accountLink.hidden = false;
+      }
+      if (['Administrator', 'Admin', 'School Administrator'].includes(user?.status)) {
+        joinButton.textContent = 'Join School';
+      }
+      async function loadSchools() {
+        try {
+          const response = await fetch('/api/schools/list');
+          const result = await response.json();
+          if (!response.ok || !result.success) throw new Error(result.error || 'Failed to load schools');
+          schools = result.schools || [];
+          renderSchools();
+        } catch (error) { message.textContent = error.message; message.style.color = '#c0392b'; }
+      }
+      function renderSchools() {
+        const term = search.value.trim().toLowerCase();
+        list.replaceChildren();
+        schools.filter(school => !term || school.name.toLowerCase().includes(term)).forEach(school => {
+          const label = document.createElement('label'); label.className = 'school-option';
+          label.innerHTML = `<input type="radio" name="schoolId" value="${school.id}"><span><strong>${school.name}</strong><br><small>${school.id}</small></span>`;
+          list.appendChild(label);
+        });
+        if (!list.children.length) list.innerHTML = '<p>No schools found.</p>';
+      }
+      document.getElementById('refresh-schools').addEventListener('click', loadSchools);
+      search.addEventListener('input', renderSchools);
+      document.getElementById('request-join').addEventListener('click', async () => {
+        const selected = list.querySelector('input[name="schoolId"]:checked');
+        if (!user?.email) { message.textContent = 'Please sign in before requesting to join a school.'; message.style.color = '#c0392b'; return; }
+        if (!selected) { message.textContent = 'Select a school first.'; message.style.color = '#c0392b'; return; }
+        try {
+          const response = await fetch('/api/schools/request-join', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ email:user.email, schoolId:selected.value }) });
+          const result = await response.json();
+          if (!response.ok || !result.success) throw new Error(result.error || 'Request failed');
+          message.textContent = result.joined ? 'You joined the school.' : 'Join request sent.';
+          message.style.color = '#27804a';
+        } catch (error) { message.textContent = error.message; message.style.color = '#c0392b'; }
+      });
+      loadSchools();
+    })();
+  </script>
+</body>
+</html>

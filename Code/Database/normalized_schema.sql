@@ -1,0 +1,23 @@
+-- Existing Supabase schema reference only.
+-- DO NOT run this file as a table-creation migration.
+-- The normalized tables already exist and use UUID foreign keys.
+-- Run Code/Helpers/migrate_normalized_data.js to populate them.
+
+-- Expected normalized tables and key columns:
+-- school_settings: school_id, location, grade_fields, api_endpoint
+-- school_themes: school_id, primary_color, secondary_color, accent_color,
+--                success_color, warning_color, background_color, text_color
+-- school_memberships: user_id, school_id, role, status
+-- school_join_requests: user_id, school_id, status, reviewed_by
+-- classes: id uuid, school_id, name, subject, created_by uuid, created_at
+-- class_members: class_id uuid, user_id uuid, role, joined_at
+-- classwork: id uuid, class_id uuid, title, description, due_at, created_by uuid
+-- grades: id uuid, classwork_id uuid, student_id uuid, score, updated_at
+-- files: id uuid, school_id uuid, class_id uuid, uploaded_by uuid,
+--        filename, storage_path, created_at
+-- global_settings: key, value, updated_at
+
+-- The migration reads legacy data from:
+-- users.school_id, users.enrolledClasses, users.taughtClasses
+-- schools.config_json
+-- and maps legacy email/text relationships to UUID relationships.

@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Sign Up | Belmont Academy LMS</title>
+  <title>Sign Up | VIC systems</title>
   <link rel="stylesheet" href="/styles/main.css">
 </head>
-<body class="auth-page sign-up">
+<body class="auth-page sign-up public-vic">
   <div class="auth-card">
     <h1>Create Account</h1>
     <form id="sign-up-form">
@@ -30,6 +30,13 @@
         Choose your role
         <select id="status" name="status"></select>
       </label>
+
+      <label>
+        School name
+        <input type="text" name="schoolName" id="schoolName" autocomplete="organization" />
+        <span style="font-weight:500; opacity:0.8; font-size:0.9rem; margin-top:-6px;">Optional. You can create or join a school from VIC Home later.</span>
+      </label>
+
       <label class="checkbox-row">
         <input type="checkbox" name="notifications" checked /> Receive grade notifications
       </label>
@@ -42,8 +49,42 @@
     <p class="helper">Already registered? <a href="sign-in.html">Sign in here</a></p>
   </div>
 
-  <script src="Code/Modules/storageModule.js"></script>
-  <script src="Code/Modules/authModule.js"></script>
-  <script src="Code/Modules/authPage.js"></script>
+  <script src="/Code/Modules/storageModule.js"></script>
+  <script src="/Code/Modules/authModule.js"></script>
+  <script src="/Code/Modules/authPage.js"></script>
+  <script src="/Code/Modules/vicThemeModule.js"></script>
+  <script>
+    (function () {
+      async function getSchoolStatusForCurrentUser() {
+        try {
+          const currentUser = JSON.parse(localStorage.getItem('lmsCurrentUser') || 'null');
+          if (!currentUser?.email) return { ok: true };
+          const url = `/api/schools/by-user?email=${encodeURIComponent(currentUser.email)}`;
+          const res = await fetch(url);
+          if (res.ok) {
+            const json = await res.json();
+            return { ok: true, hasSchool: !!json?.config_json };
+          }
+          return { ok: false, hasSchool: false };
+        } catch (e) {
+          return { ok: true };
+        }
+      }
+
+      window.addEventListener('DOMContentLoaded', async () => {
+        const form = document.getElementById('sign-up-form');
+        if (!form) return;
+        const submitBtn = form.querySelector('button[type="submit"]');
+        if (!submitBtn) return;
+
+        const status = await getSchoolStatusForCurrentUser();
+        if (status && status.hasSchool === false) {
+          submitBtn.disabled = true;
+          submitBtn.style.opacity = '0.55';
+          submitBtn.style.cursor = 'not-allowed';
+        }
+      });
+    })();
+  </script>
 </body>
 </html>
