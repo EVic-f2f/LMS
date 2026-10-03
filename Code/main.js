@@ -8,8 +8,9 @@ const App = {
   currentAccount: null,
   currentSchoolId: null,
   currentSchoolName: null,
-  refreshInterval: null,
   refreshInProgress: false,
+  pendingRealtimeRefresh: false,
+  realtimeController: null,
 
   async init() {
     await Auth.ensureDefaultAdmin();
@@ -67,7 +68,7 @@ const App = {
 
     // Setup event listeners
     this.setupEventListeners();
-    this.startAutoRefresh();
+    this.startRealtimeUpdates();
 
     // Initialize Classes module if available
     if (typeof Classes !== "undefined") {
@@ -147,20 +148,81 @@ const App = {
     }
   },
 
-  startAutoRefresh() {
-    if (this.refreshInterval) clearInterval(this.refreshInterval);
-    this.refreshInterval = setInterval(() => this.refreshActiveView(), 15000);
+  startRealtimeUpdates() {
+    this.realtimeController?.abort();
+    this.realtimeController = new AbortController();
+    this.connectRealtimeUpdates(this.realtimeController.signal);
     document.addEventListener("visibilitychange", () => {
       if (!document.hidden) this.refreshActiveView();
     });
     window.addEventListener("pageshow", () => this.refreshActiveView());
+    document.addEventListener("focusout", () => {
+      if (this.pendingRealtimeRefresh) setTimeout(() => this.refreshActiveView(), 0);
+    });
+  },
+
+  stopRealtimeUpdates() {
+    this.realtimeController?.abort();
+    this.realtimeController = null;
+  },
+
+  async connectRealtimeUpdates(signal) {
+    let retryDelay = 1000;
+    while (!signal.aborted) {
+      try {
+        const token = localStorage.getItem(Auth.SESSION_KEY);
+        if (!token) return;
+
+        const headers = { Authorization: `Bearer ${token}` };
+        if (this.currentSchoolId) headers["X-School-Id"] = this.currentSchoolId;
+        const response = await fetch("/api/events", { headers, signal });
+        if (!response.ok) {
+          const result = await response.json().catch(() => ({}));
+          throw new Error(result.error || `Live updates failed (${response.status}).`);
+        }
+        if (!response.body) throw new Error("Live updates are not supported by this browser.");
+
+        retryDelay = 1000;
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        while (!signal.aborted) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const messages = buffer.split(/\r?\n\r?\n/);
+          buffer = messages.pop() || "";
+          for (const message of messages) {
+            if (message.split(/\r?\n/).some((line) => line === "event: update")) {
+              this.refreshActiveView();
+            }
+          }
+        }
+      } catch (error) {
+        if (signal.aborted) return;
+        console.warn("Live update connection interrupted; reconnecting.", error.message || error);
+      }
+
+      await new Promise((resolve) => {
+        const timeoutId = setTimeout(resolve, retryDelay);
+        signal.addEventListener("abort", () => {
+          clearTimeout(timeoutId);
+          resolve();
+        }, { once: true });
+      });
+      retryDelay = Math.min(retryDelay * 2, 30000);
+    }
   },
 
   async refreshActiveView() {
     if (document.hidden || this.refreshInProgress || !Auth.getCurrentUser()) return;
 
     const activeElement = document.activeElement;
-    if (activeElement?.matches("input, textarea, select, [contenteditable='true']")) return;
+    if (activeElement?.matches("input, textarea, select, [contenteditable='true']")) {
+      this.pendingRealtimeRefresh = true;
+      return;
+    }
+    this.pendingRealtimeRefresh = false;
 
     this.refreshInProgress = true;
     try {

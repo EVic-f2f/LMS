@@ -314,6 +314,7 @@ const Auth = {
     this.clearCurrentUser();
     localStorage.removeItem(this.SESSION_KEY);
     if (typeof App !== "undefined") {
+      App.stopRealtimeUpdates?.();
       App.currentAccount = null;
     }
     if (window.location.pathname.endsWith("index.html") || window.location.pathname === "/") {

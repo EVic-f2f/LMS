@@ -38,6 +38,7 @@ function getSupabaseClientOrNull() {
 
 
 const supabase = getSupabaseClientOrNull();
+const realtimeClients = new Set();
 
 function requireSupabase() {
   if (!supabase) {
@@ -417,6 +418,46 @@ function deleteStoredFile(filename) {
     if (fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
     }
+}
+
+function broadcastRealtimeChange(change) {
+    const row = change.new && Object.keys(change.new).length ? change.new : (change.old || {});
+    const schoolId = row.school_id || (change.table === "schools" ? row.id : null);
+    for (const client of realtimeClients) {
+        if (!schoolId || String(client.schoolId) === String(schoolId)) {
+            client.response.write("event: update\ndata: {}\n\n");
+        }
+    }
+}
+
+function initializeRealtime() {
+    if (!supabase) return;
+    const tables = [
+        "users",
+        "schools",
+        "school_memberships",
+        "school_join_requests",
+        "classes",
+        "classwork",
+        "grades",
+        "school_settings",
+        "school_themes"
+    ];
+    let channel = supabase.channel("lms-live-updates");
+    tables.forEach((table) => {
+        channel = channel.on("postgres_changes", {
+            event: "*",
+            schema: "public",
+            table
+        }, broadcastRealtimeChange);
+    });
+    channel.subscribe((status) => {
+        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+            console.error(`Supabase Realtime subscription status: ${status}`);
+        } else if (status === "SUBSCRIBED") {
+            console.log("Supabase Realtime connected.");
+        }
+    });
 }
 
 function handleRequest(req, res) {
@@ -1373,6 +1414,42 @@ function handleRequest(req, res) {
     }
 
 
+    if (url.pathname === "/api/events") {
+        setCorsHeaders(res);
+        if (req.method === "OPTIONS") {
+            res.writeHead(204);
+            res.end();
+            return;
+        }
+        if (req.method !== "GET") {
+            sendJson(res, 405, { error: "Method not allowed" });
+            return;
+        }
+
+        (async () => {
+            const scope = await getStorageScope(req);
+            res.writeHead(200, {
+                "Content-Type": "text/event-stream; charset=utf-8",
+                "Cache-Control": "no-cache, no-transform",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no"
+            });
+            res.write("retry: 3000\nevent: ready\ndata: {}\n\n");
+            const client = { schoolId: String(scope.schoolId), response: res };
+            realtimeClients.add(client);
+            const heartbeat = setInterval(() => res.write(": keep-alive\n\n"), 25000);
+            heartbeat.unref?.();
+            res.on("close", () => {
+                clearInterval(heartbeat);
+                realtimeClients.delete(client);
+            });
+        })().catch((error) => {
+            if (!res.headersSent) sendJson(res, error.statusCode || 500, { success: false, error: error.message });
+            else res.end();
+        });
+        return;
+    }
+
     if (url.pathname === "/api/files") {
         setCorsHeaders(res);
         if (req.method === "OPTIONS") {
@@ -1516,6 +1593,7 @@ function handleRequest(req, res) {
     try {
         await initializeDatabase();
         requireSupabase();
+        initializeRealtime();
         const server = http.createServer(handleRequest);
         server.listen(PORT, "0.0.0.0", () => {
             console.log(`LMS server running at http://localhost:${PORT}`);
