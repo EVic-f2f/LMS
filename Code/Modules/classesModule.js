@@ -58,23 +58,27 @@ const Classes = {
     content.innerHTML = '<p style="text-align: center; color: #999;">Loading classes...</p>';
 
     try {
-      if (Auth.isTeacherOrHigher(currentUser)) {
-        await this.renderTeacherView(content, currentUser);
+      const users = await Auth.getUsers({ strict: true });
+      const freshUser = users.find((record) => String(record.email).toLowerCase() === String(currentUser.email).toLowerCase());
+      if (!freshUser) throw new Error('Signed-in user was not found in the school database.');
+
+      if (Auth.isTeacherOrHigher(freshUser)) {
+        await this.renderTeacherView(content, freshUser, users);
       } else {
-        await this.renderStudentView(content, currentUser);
+        await this.renderStudentView(content, freshUser, users);
       }
     } catch (error) {
       console.error('Error loading classes:', error);
-      content.innerHTML = '<p style="color: red;">Error loading classes. Please try again.</p>';
+      content.innerHTML = `<p style="color:red;">${this.escapeHtml(error.message || 'Error loading classes. Please try again.')}</p>`;
     }
   },
 
-  async renderStudentView(content, user) {
-    const users = await Auth.getUsers();
-    const teachers = users.filter(u => u.status === 'Teacher' || u.status === 'Administrator');
+  async renderStudentView(content, user, users) {
+    const currentUser = user;
+    const teachers = users.filter(u => ['Teacher', 'School Administrator', 'Administrator', 'Admin'].includes(u.status));
 
-    const enrolledClassesHtml = user.enrolledClasses && user.enrolledClasses.length > 0
-      ? user.enrolledClasses.map(classId => {
+    const enrolledClassesHtml = currentUser.enrolledClasses && currentUser.enrolledClasses.length > 0
+      ? currentUser.enrolledClasses.map(classId => {
           const teacher = teachers.find(t => t.taughtClasses && t.taughtClasses.some(c => c.id === classId));
           const classInfo = teacher ? teacher.taughtClasses.find(c => c.id === classId) : null;
           return `
@@ -112,8 +116,8 @@ const Classes = {
               <ul>
                 ${teacher.taughtClasses && teacher.taughtClasses.length > 0
                   ? teacher.taughtClasses.map(classInfo => {
-                      const isEnrolled = user.enrolledClasses && user.enrolledClasses.includes(classInfo.id);
-                      const hasPendingRequest = classInfo.pendingRequests && classInfo.pendingRequests.some(r => r.studentEmail === user.email);
+                      const isEnrolled = currentUser.enrolledClasses && currentUser.enrolledClasses.includes(classInfo.id);
+                      const hasPendingRequest = classInfo.pendingRequests && classInfo.pendingRequests.some(r => r.studentEmail === currentUser.email);
                       let buttonText = 'Request to Join';
                       let buttonDisabled = false;
                       let bgColor = '#3498db';
@@ -146,8 +150,8 @@ const Classes = {
     `;
   },
 
-  async renderTeacherView(content, user) {
-    const users = await Auth.getUsers();
+  async renderTeacherView(content, user, users) {
+    const currentUser = user;
     const students = users.filter(u => u.status === 'Student');
 
     content.innerHTML = `
@@ -155,17 +159,17 @@ const Classes = {
         <h4>My Classes</h4>
         <button onclick="Classes.createNewClass()" class="btn-secondary" style="margin-bottom: 15px;">+ Create New Class</button>
         <div id="teacher-classes-list">
-          ${user.taughtClasses && user.taughtClasses.length > 0
-            ? user.taughtClasses.map(classInfo => `
+          ${currentUser.taughtClasses && currentUser.taughtClasses.length > 0
+            ? currentUser.taughtClasses.map(classInfo => `
                 <div class="class-card themed-panel">
                   <div><strong>${classInfo.name} (${classInfo.subject})</strong></div>
                   <div class="muted" style="display:flex; flex-wrap:wrap; gap: 12px; font-size: 0.95em;">
                     <span><strong>Class ID:</strong> ${classInfo.id}</span>
                     <span><strong>Students:</strong> ${classInfo.students ? classInfo.students.length : 0}</span>
-                    <span><strong>Teacher:</strong> ${user.name}</span>
+                    <span><strong>Teacher:</strong> ${currentUser.name}</span>
                   </div>
                   <div class="class-actions">
-                    <button onclick="Classes.openClassDetail('${this.escapeHtml(classInfo.id)}', '${this.escapeHtml(user.email)}')" class="btn-primary">Manage Class</button>
+                    <button onclick="Classes.openClassDetail('${this.escapeHtml(classInfo.id)}', '${this.escapeHtml(currentUser.email)}')" class="btn-primary">Manage Class</button>
 
                   </div>
 
@@ -230,7 +234,7 @@ const Classes = {
       return;
     }
 
-    const users = await Auth.getUsers();
+    const users = await Auth.getUsers({ strict: true });
     const teacher = users.find(u => u.email === this.selectedTeacherEmail);
     const classInfo = teacher?.taughtClasses?.find(c => c.id === this.selectedClassId);
 
@@ -487,7 +491,7 @@ const Classes = {
     const table = content.querySelector('#class-grades-table');
     if (!table) return;
 
-    const users = await Auth.getUsers();
+    const users = await Auth.getUsers({ strict: true });
     const teacher = users.find(u => u.email === this.selectedTeacherEmail);
     const classInfo = teacher?.taughtClasses?.find(c => c.id === this.selectedClassId);
     if (!classInfo || !teacher) {
@@ -507,7 +511,7 @@ const Classes = {
     });
 
     classInfo.studentGrades = studentGrades;
-    await Auth.saveUsers(users);
+    await Auth.saveUsers(users, { strict: true });
     alert('Class grades saved successfully.');
     await this.renderClassDetail();
   },
@@ -524,7 +528,7 @@ const Classes = {
     if (!currentUser) return;
 
     try {
-      const users = await Auth.getUsers();
+      const users = await Auth.getUsers({ strict: true });
       const teacherIndex = users.findIndex(u => u.email === teacherEmail);
 
       if (teacherIndex === -1) {
@@ -560,13 +564,13 @@ const Classes = {
         requestedAt: new Date().toISOString()
       });
 
-      await Auth.saveUsers(users);
+      await Auth.saveUsers(users, { strict: true });
       alert('Request sent! The teacher will review your request.');
       await this.render(); // Refresh the view with await
 
     } catch (error) {
       console.error('Error requesting to join class:', error);
-      alert('Error sending request. Please try again.');
+      alert(error.message || 'Error sending request. Please try again.');
     }
   },
 
@@ -578,7 +582,7 @@ const Classes = {
     if (!currentUser) return;
 
     try {
-      const users = await Auth.getUsers();
+      const users = await Auth.getUsers({ strict: true });
       const teacherIndex = users.findIndex(u => u.email === currentUser.email);
 
       if (teacherIndex === -1) return;
@@ -607,13 +611,13 @@ const Classes = {
         }
       }
 
-      await Auth.saveUsers(users);
+      await Auth.saveUsers(users, { strict: true });
       alert('Student accepted into class!');
       await this.render(); // Refresh the view with await
 
     } catch (error) {
       console.error('Error accepting request:', error);
-      alert('Error accepting request. Please try again.');
+      alert(error.message || 'Error accepting request. Please try again.');
     }
   },
 
@@ -625,7 +629,7 @@ const Classes = {
     if (!currentUser) return;
 
     try {
-      const users = await Auth.getUsers();
+      const users = await Auth.getUsers({ strict: true });
       const teacherIndex = users.findIndex(u => u.email === currentUser.email);
 
       if (teacherIndex === -1) return;
@@ -638,13 +642,13 @@ const Classes = {
       // Remove from pending requests
       classInfo.pendingRequests = classInfo.pendingRequests.filter(r => r.studentEmail !== studentEmail);
 
-      await Auth.saveUsers(users);
+      await Auth.saveUsers(users, { strict: true });
       alert('Request rejected.');
       await this.render(); // Refresh the view with await
 
     } catch (error) {
       console.error('Error rejecting request:', error);
-      alert('Error rejecting request. Please try again.');
+      alert(error.message || 'Error rejecting request. Please try again.');
     }
   },
 
@@ -662,7 +666,7 @@ const Classes = {
     if (!currentUser) return;
 
     try {
-      const users = await Auth.getUsers();
+      const users = await Auth.getUsers({ strict: true });
       const teacherIndex = users.findIndex(u => u.email === currentUser.email);
 
       if (teacherIndex === -1) return;
@@ -681,13 +685,13 @@ const Classes = {
         createdAt: new Date().toISOString()
       });
 
-      await Auth.saveUsers(users);
+      await Auth.saveUsers(users, { strict: true });
       alert('Class created successfully!');
       await this.render(); // Refresh the view with await
 
     } catch (error) {
       console.error('Error creating class:', error);
-      alert('Error creating class. Please try again.');
+      alert(error.message || 'Error creating class. Please try again.');
     }
   }
 };

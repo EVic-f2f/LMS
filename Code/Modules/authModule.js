@@ -47,7 +47,7 @@ const Auth = {
     }
   },
 
-  async getUsers() {
+  async getUsers({ strict = false } = {}) {
     const timeoutMs = 15000;
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
@@ -58,6 +58,7 @@ const Auth = {
       return await response.json();
     } catch (error) {
       console.error("API Error (GET users):", error);
+      if (strict) throw error;
       // Fallback to localStorage
       try {
         const data = localStorage.getItem(this.USERS_KEY);
@@ -71,8 +72,8 @@ const Auth = {
     }
   },
 
-  async saveUsers(users) {
-    const timeoutMs = 5000;
+  async saveUsers(users, { strict = false } = {}) {
+    const timeoutMs = 20000;
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -83,18 +84,21 @@ const Auth = {
         body: JSON.stringify(users),
         signal: controller.signal
       });
-      if (!response.ok) throw new Error("Failed to save users");
+      if (!response.ok) {
+        const result = await response.json().catch(() => ({}));
+        throw new Error(result.error || "Failed to save users");
+      }
       return await response.json();
     } catch (error) {
       console.error("API Error (POST users):", error);
-      // Fallback to localStorage
+      // Keep a recovery copy, but allow shared-data workflows to fail visibly.
       try {
         localStorage.setItem(this.USERS_KEY, JSON.stringify(users));
-        return true;
       } catch (e) {
         console.warn("Auth save users error:", e);
-        return false;
       }
+      if (strict) throw error;
+      return true;
     } finally {
       clearTimeout(timeoutId);
     }
@@ -155,7 +159,7 @@ const Auth = {
   },
 
   isTeacherOrHigher(user = this.getCurrentUser()) {
-    return user && ["Teacher", "School Administrator", "Administrator"].includes(user.status);
+    return user && ["Teacher", "School Administrator", "Administrator", "Admin"].includes(user.status);
   },
 
   isAdministrator(user = this.getCurrentUser()) {
@@ -163,7 +167,7 @@ const Auth = {
   },
 
   isSchoolAdministrator(user = this.getCurrentUser()) {
-    return user && ["School Administrator", "Administrator"].includes(user.status);
+    return user && ["School Administrator", "Administrator", "Admin"].includes(user.status);
   },
 
   async registerUser(profile) {
