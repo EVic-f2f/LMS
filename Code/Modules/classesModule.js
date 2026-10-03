@@ -96,14 +96,14 @@ const Classes = {
 
     content.innerHTML = `
       <div style="margin-bottom: 20px;">
-        <h4>📚 My Classes</h4>
+        <h4>My Classes</h4>
         <div id="student-classes-list">
           ${enrolledClassesHtml}
         </div>
       </div>
 
       <div>
-        <h4>🔍 Find a Class</h4>
+        <h4>Find a Class</h4>
         <div id="available-teachers">
           ${teachers.map(teacher => `
             <div class="teacher-card themed-panel">

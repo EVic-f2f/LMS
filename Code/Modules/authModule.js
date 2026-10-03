@@ -48,7 +48,7 @@ const Auth = {
   },
 
   async getUsers() {
-    const timeoutMs = 5000;
+    const timeoutMs = 15000;
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 

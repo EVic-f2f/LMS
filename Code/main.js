@@ -283,24 +283,6 @@ const App = {
     document.title = `${schoolName} LMS`;
   },
 
-  load() {
-    // Try browser storage first
-    const stored = Storage.getStudents();
-    if (stored && Array.isArray(stored) && stored.length > 0) {
-      Table.buildStudentTable(stored);
-      return;
-    }
-
-    // Fallback to server
-    API.getStudents()
-      .then((students) => {
-        Table.buildStudentTable(Array.isArray(students) ? students : this.config.defaultStudents);
-      })
-      .catch(() => {
-        Table.buildStudentTable(this.config.defaultStudents);
-      });
-  },
-
   async save() {
     if (!Auth.isTeacherOrHigher(this.currentAccount)) {
       alert("Only teachers and administrators can save grades.");

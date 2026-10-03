@@ -13,18 +13,6 @@ const API = {
     return this.endpoint || "/api/students";
   },
 
-  async getStudents() {
-    try {
-      const url = this.getEndpoint();
-      const response = await fetch(url);
-      if (!response.ok) throw new Error("Failed to fetch students");
-      return await response.json();
-    } catch (error) {
-      console.error("API Error (GET):", error);
-      throw error;
-    }
-  },
-
   async saveStudents(students) {
     try {
       const url = this.getEndpoint();

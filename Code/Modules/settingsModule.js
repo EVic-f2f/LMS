@@ -12,16 +12,19 @@ const Settings = {
 
       if (!email) throw new Error("No signed-in user");
 
-      const url = `/api/schools/by-user?email=${encodeURIComponent(email)}`;
+      const schoolQuery = App.currentSchoolId
+        ? `&schoolId=${encodeURIComponent(App.currentSchoolId)}`
+        : "";
+      const url = `/api/schools/by-user?email=${encodeURIComponent(email)}${schoolQuery}`;
 
       const response = await fetch(url);
       const json = await response.json();
 
       if (response.ok && json?.config_json) {
         this.config = json.config_json;
+        App.currentSchoolId = json.school?.id || App.currentSchoolId;
       } else {
-        const fallback = await fetch("/Code/config.json");
-        this.config = await fallback.json();
+        throw new Error(json?.error || "Unable to load settings for the selected school.");
       }
       if (typeof App !== "undefined") {
         App.config = this.config;

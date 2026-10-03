@@ -366,7 +366,9 @@ function sendStaticFile(res, filePath) {
             ".gif": "image/gif"
         }[ext] || "application/octet-stream";
 
-        res.writeHead(200, { "Content-Type": contentType });
+        const headers = { "Content-Type": contentType };
+        if (ext === ".html" || ext === ".js") headers["Cache-Control"] = "no-cache, must-revalidate";
+        res.writeHead(200, headers);
         res.end(content);
     });
 }
