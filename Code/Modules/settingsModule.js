@@ -21,7 +21,10 @@ const Settings = {
       const json = await response.json();
 
       if (response.ok && json?.config_json) {
-        this.config = json.config_json;
+        this.config = {
+          ...json.config_json,
+          ...(!json.config_json.schoolName && json.school?.name ? { schoolName: json.school.name } : {})
+        };
         App.currentSchoolId = json.school?.id || App.currentSchoolId;
       } else {
         throw new Error(json?.error || "Unable to load settings for the selected school.");
@@ -83,7 +86,7 @@ const Settings = {
           <section class="settings-panel" data-settings-panel="fields">
             <h3>Grade Fields</h3>
             <p class="settings-help">Use one field per line.</p>
-            <textarea class="settings-input settings-fields-input" data-setting-key="gradeFields" rows="8">${this.escapeHtml(fields.join("\\n"))}</textarea>
+            <textarea class="settings-input settings-fields-input" data-setting-key="gradeFields" rows="8">${this.escapeHtml(fields.join("\n"))}</textarea>
           </section>
           <section class="settings-panel" data-settings-panel="apis">
             <h3>APIs</h3>
@@ -334,9 +337,11 @@ const Settings = {
     const form = document.getElementById("settings-form");
     form.querySelectorAll("[data-setting-key]").forEach((input) => {
       const key = input.dataset.settingKey;
-      settings[key] = key === "gradeFields"
-        ? input.value.split("\\n").map((value) => value.trim()).filter(Boolean)
-        : input.value;
+      if (key === "gradeFields") {
+        settings[key] = input.value.split(/\r?\n/).map((value) => value.trim()).filter(Boolean);
+      } else {
+        settings[key] = key === "schoolName" ? input.value.trim() : input.value;
+      }
     });
     settings.theme = { ...(settings.theme || {}) };
     form.querySelectorAll("[data-theme-text-key]").forEach((input) => {
@@ -354,25 +359,29 @@ const Settings = {
       }
 
       const url = "/api/schools/update-config";
+      const token = localStorage.getItem(Auth.SESSION_KEY);
 
       const response = await fetch(url, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({ email, schoolId: App.currentSchoolId, config_json: settings })
       });
 
-
-
-      if (response.ok) {
-        this.config = settings;
-        App.config = settings;
-        App.applyTheme();
-        App.updateSidebarInfo();
-        this.render();
-        alert("Settings saved successfully.");
-      } else {
-        alert("✗ Failed to save settings to server");
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to save settings to server.");
       }
+
+      this.config = settings;
+      App.config = settings;
+      if (settings.schoolName?.trim()) App.currentSchoolName = settings.schoolName.trim();
+      App.applyTheme();
+      App.updateSidebarInfo();
+      this.render();
+      alert("Settings saved successfully.");
     } catch (e) {
       alert("✗ Error saving settings: " + e.message);
     }

@@ -47,13 +47,14 @@ const Auth = {
     }
   },
 
-  async getUsers({ strict = false } = {}) {
+  async getUsers({ strict = false, includeClasses = false } = {}) {
     const timeoutMs = 15000;
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
-      const response = await fetch(`/api/users`, { signal: controller.signal });
+      const usersUrl = includeClasses ? "/api/users?includeClasses=true" : "/api/users";
+      const response = await fetch(usersUrl, { signal: controller.signal });
       if (!response.ok) throw new Error("Failed to fetch users");
       return await response.json();
     } catch (error) {

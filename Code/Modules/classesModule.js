@@ -58,7 +58,7 @@ const Classes = {
     content.innerHTML = '<p style="text-align: center; color: #999;">Loading classes...</p>';
 
     try {
-      const users = await Auth.getUsers({ strict: true });
+      const users = await Auth.getUsers({ strict: true, includeClasses: true });
       const freshUser = users.find((record) => String(record.email).toLowerCase() === String(currentUser.email).toLowerCase());
       if (!freshUser) throw new Error('Signed-in user was not found in the school database.');
 
@@ -234,7 +234,7 @@ const Classes = {
       return;
     }
 
-    const users = await Auth.getUsers({ strict: true });
+    const users = await Auth.getUsers({ strict: true, includeClasses: true });
     const teacher = users.find(u => u.email === this.selectedTeacherEmail);
     const classInfo = teacher?.taughtClasses?.find(c => c.id === this.selectedClassId);
 
@@ -277,7 +277,7 @@ const Classes = {
               <tr data-email="${student.email}">
                     <td>${this.escapeHtml(student.name)}</td>
                 ${Table.gradeFields.map(field => `
-                  <td contenteditable="true" class="grade-cell" data-field="${field}" style="min-width: 80px; padding: 10px; border: 1px solid rgba(0,0,0,0.06);">${studentGrades[field] || ''}</td>
+                  <td contenteditable="true" class="grade-cell" data-field="${field}" style="min-width: 80px; padding: 10px; border: 1px solid rgba(0,0,0,0.06);">${studentGrades[field] ?? ''}</td>
                 `).join('')}
               </tr>
             `;
@@ -318,13 +318,27 @@ const Classes = {
       const gradeCells = content.querySelectorAll('#class-grades-table .grade-cell');
       gradeCells.forEach(cell => cell.addEventListener('input', (event) => Validation.validateScore(event)));
     } else {
+      const allGrades = classInfo.studentGrades || {};
+      const emailKey = Object.keys(allGrades).find((email) =>
+        String(email).toLowerCase() === String(currentUser.email).toLowerCase()
+      );
+      const studentGrades = emailKey ? allGrades[emailKey] : {};
+      const gradeRows = Table.gradeFields.map((field) => `
+        <tr>
+          <th>${this.escapeHtml(field)}</th>
+          <td>${this.escapeHtml(studentGrades[field] ?? '')}</td>
+        </tr>
+      `).join('');
+      const hasGrades = Table.gradeFields.some((field) =>
+        studentGrades[field] !== undefined && studentGrades[field] !== null && String(studentGrades[field]).trim() !== ''
+      );
       content.innerHTML = `
         ${header}
         ${tabBar}
         <div id="class-tab-grades" class="class-tab-content" style="display: block;">
           <div class="themed-panel">
             <h4 style="margin-top:0;">Your Grades</h4>
-            <p class="muted" style="margin-bottom:0;">Your grades will appear here.</p>
+            ${hasGrades ? `<table class="student-grades-table"><thead><tr><th>Field</th><th>Grade</th></tr></thead><tbody>${gradeRows}</tbody></table>` : '<p class="muted" style="margin-bottom:0;">Your grades will appear here.</p>'}
           </div>
         </div>
         ${classworkTabContent}
@@ -491,7 +505,7 @@ const Classes = {
     const table = content.querySelector('#class-grades-table');
     if (!table) return;
 
-    const users = await Auth.getUsers({ strict: true });
+    const users = await Auth.getUsers({ strict: true, includeClasses: true });
     const teacher = users.find(u => u.email === this.selectedTeacherEmail);
     const classInfo = teacher?.taughtClasses?.find(c => c.id === this.selectedClassId);
     if (!classInfo || !teacher) {
@@ -528,7 +542,7 @@ const Classes = {
     if (!currentUser) return;
 
     try {
-      const users = await Auth.getUsers({ strict: true });
+      const users = await Auth.getUsers({ strict: true, includeClasses: true });
       const teacherIndex = users.findIndex(u => u.email === teacherEmail);
 
       if (teacherIndex === -1) {
@@ -582,7 +596,7 @@ const Classes = {
     if (!currentUser) return;
 
     try {
-      const users = await Auth.getUsers({ strict: true });
+      const users = await Auth.getUsers({ strict: true, includeClasses: true });
       const teacherIndex = users.findIndex(u => u.email === currentUser.email);
 
       if (teacherIndex === -1) return;
@@ -629,7 +643,7 @@ const Classes = {
     if (!currentUser) return;
 
     try {
-      const users = await Auth.getUsers({ strict: true });
+      const users = await Auth.getUsers({ strict: true, includeClasses: true });
       const teacherIndex = users.findIndex(u => u.email === currentUser.email);
 
       if (teacherIndex === -1) return;
@@ -666,7 +680,7 @@ const Classes = {
     if (!currentUser) return;
 
     try {
-      const users = await Auth.getUsers({ strict: true });
+      const users = await Auth.getUsers({ strict: true, includeClasses: true });
       const teacherIndex = users.findIndex(u => u.email === currentUser.email);
 
       if (teacherIndex === -1) return;

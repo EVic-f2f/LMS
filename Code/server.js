@@ -2,6 +2,8 @@ const http = require("http");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+const { isDeepStrictEqual } = require("util");
+const { mergeNormalizedClassData } = require("./Helpers/normalized_data_utils");
 
 
 const { createClient } = require("@supabase/supabase-js");
@@ -82,16 +84,32 @@ async function initializeDatabase() {
     fs.mkdirSync(filesFolder, { recursive: true });
 }
 
-async function getUserData() {
+async function getAllRows(table, columns, orderColumns) {
+    const pageSize = 500;
+    const rows = [];
+    for (let from = 0; ; from += pageSize) {
+        let query = supabase.from(table).select(columns);
+        for (const column of orderColumns) {
+            query = query.order(column, { ascending: true });
+        }
+        const { data, error } = await query.range(from, from + pageSize - 1);
+        if (error) throw error;
+        const page = data || [];
+        rows.push(...page);
+        if (page.length < pageSize) return rows;
+    }
+}
+
+async function getUserData({ includeNormalizedClasses = false } = {}) {
     // Service role bypasses RLS; requires SUPABASE_SERVICE_ROLE_KEY.
     requireSupabase();
-    const { data, error } = await supabase
-        .from("users")
-        .select("email, name, status, preferences, passwordHash, school_id, createdAt, lastSignedIn, enrolledClasses, taughtClasses");
-
-    if (error) throw error;
-
-    return (data || []).map((row) => ({
+    const rows = await getAllRows(
+        "users",
+        "id, email, name, status, preferences, passwordHash, school_id, createdAt, lastSignedIn, enrolledClasses, taughtClasses",
+        ["id"]
+    );
+    const users = rows.map((row) => ({
+        id: row.id,
         email: row.email,
         name: row.name,
         status: row.status,
@@ -103,38 +121,68 @@ async function getUserData() {
         enrolledClasses: row.enrolledClasses || [],
         taughtClasses: row.taughtClasses || []
     }));
+
+    if (includeNormalizedClasses) {
+        const [classes, members, classwork, grades] = await Promise.all([
+            getAllRows("classes", "id, school_id, name, subject, created_by, created_at", ["id"]),
+            getAllRows("class_members", "class_id, user_id, role", ["class_id", "user_id"]),
+            getAllRows("classwork", "id, class_id, title", ["id"]),
+            getAllRows("grades", "id, classwork_id, student_id, score, updated_at", ["id"])
+        ]);
+        mergeNormalizedClassData(users, classes, members, classwork, grades);
+    }
+
+    return users;
 }
 
 
 async function saveUserData(updatedUsers) {
-    // Upsert changed records without deleting users or clearing fields omitted by the client.
-    try {
-        for (const user of updatedUsers) {
-            let passwordHash = String(user.passwordHash || "").trim();
+    const existingRows = await getAllRows(
+        "users",
+        "email, name, status, preferences, passwordHash, school_id, createdAt, lastSignedIn, enrolledClasses, taughtClasses",
+        ["email"]
+    );
+    const existingByEmail = new Map(existingRows.map((row) => [String(row.email).toLowerCase(), row]));
 
-            const record = {
-                email: String(user.email || ""),
-                name: String(user.name || ""),
-                status: String(user.status || ""),
-                preferences: user.preferences || {},
-                school_id: user.school_id || null,
-                createdAt: String(user.createdAt || ""),
-                lastSignedIn: String(user.lastSignedIn || ""),
-                enrolledClasses: user.enrolledClasses || [],
-                taughtClasses: user.taughtClasses || []
-            };
+    for (const user of updatedUsers) {
+        const passwordHash = String(user.passwordHash || "").trim();
+        const record = {
+            email: String(user.email || ""),
+            name: String(user.name || ""),
+            status: String(user.status || ""),
+            preferences: user.preferences || {},
+            school_id: user.school_id || null,
+            createdAt: String(user.createdAt || ""),
+            lastSignedIn: String(user.lastSignedIn || ""),
+            enrolledClasses: user.enrolledClasses || [],
+            taughtClasses: user.taughtClasses || []
+        };
+        if (passwordHash) record.passwordHash = passwordHash;
 
-            // Do not overwrite a real hash when a sanitized browser user is saved.
-            if (passwordHash) record.passwordHash = passwordHash;
-
-            const { error: upsertError } = await supabase.from("users").upsert(record, { onConflict: "email" });
-            if (upsertError) throw upsertError;
+        const existing = existingByEmail.get(record.email.toLowerCase());
+        if (!existing) {
+            const { error } = await supabase.from("users").insert(record);
+            if (error) throw error;
+            continue;
         }
 
-        return updatedUsers;
-    } catch (error) {
-        throw error;
+        const priorClasses = new Map((existing.taughtClasses || []).map((classInfo) => [String(classInfo.id), classInfo]));
+        record.taughtClasses = record.taughtClasses.map((classInfo) => {
+            const priorClass = priorClasses.get(String(classInfo.id));
+            if (classInfo.studentGrades && (!priorClass || !isDeepStrictEqual(priorClass.studentGrades, classInfo.studentGrades))) {
+                return { ...classInfo, studentGradesUpdatedAt: new Date().toISOString() };
+            }
+            return classInfo;
+        });
+
+        const changed = Object.entries(record).some(([key, value]) => !isDeepStrictEqual(existing[key], value));
+        if (!changed) continue;
+
+        const { error } = await supabase.from("users").update(record).eq("email", existing.email);
+        if (error) throw error;
     }
+
+    return updatedUsers;
 }
 
 
@@ -535,7 +583,7 @@ function handleRequest(req, res) {
         }
 
         if (req.method === "GET") {
-            getUserData()
+            getUserData({ includeNormalizedClasses: url.searchParams.get("includeClasses") === "true" })
                 .then((data) => sendJson(res, 200, data.map(sanitizeUserForClient)))
                 .catch((err) => sendJson(res, 500, { success: false, error: err.message }));
             return;
@@ -1234,16 +1282,16 @@ function handleRequest(req, res) {
             req.on("end", async () => {
                 try {
                     const payload = JSON.parse(body || "{}");
-                    const email = payload.email;
+                    const email = getSessionEmail(req);
                     const config_json = payload.config_json;
 
-                    if (!email || !config_json) {
-                        sendJson(res, 400, { success: false, error: "Missing email or config_json" });
+                    if (!config_json || typeof config_json !== "object" || Array.isArray(config_json)) {
+                        sendJson(res, 400, { success: false, error: "A valid config_json object is required" });
                         return;
                     }
 
                     requireSupabase();
-                    const normalizedEmail = String(email).trim().toLowerCase();
+                    const normalizedEmail = email;
 
                     // fetch user's status + school_id
                     const { data: userRow, error: userErr } = await supabase
@@ -1286,16 +1334,22 @@ function handleRequest(req, res) {
                         return;
                     }
 
+                    const schoolUpdates = { config_json };
+                    const schoolName = typeof config_json.schoolName === "string"
+                        ? config_json.schoolName.trim()
+                        : "";
+                    if (schoolName) schoolUpdates.name = schoolName;
+
                     const { error: upErr } = await supabase
                         .from("schools")
-                        .update({ config_json })
+                        .update(schoolUpdates)
                         .eq("id", schoolId);
 
                     if (upErr) throw upErr;
 
                     sendJson(res, 200, { success: true });
                 } catch (err) {
-                    sendJson(res, 500, { success: false, error: err.message });
+                    sendJson(res, err.statusCode || 500, { success: false, error: err.message });
                 }
             });
 

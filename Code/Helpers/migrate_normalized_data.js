@@ -1,6 +1,7 @@
 const { createClient } = require('@supabase/supabase-js');
 const fs = require('fs');
 const path = require('path');
+const { legacyIdToUuid } = require('./normalized_data_utils');
 require('dotenv').config({ path: require('path').join(__dirname, '..', '..', '.env') });
 
 const supabaseUrl = process.env.SUPABASE_URL;
@@ -10,11 +11,6 @@ if (!supabaseUrl || !serviceKey) {
 }
 
 const supabase = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
-
-function legacyIdToUuid(value) {
-  const digest = require('crypto').createHash('md5').update(String(value)).digest('hex');
-  return `${digest.slice(0, 8)}-${digest.slice(8, 12)}-5${digest.slice(13, 16)}-a${digest.slice(17, 20)}-${digest.slice(20, 32)}`;
-}
 
 function failIfError(result, label) {
   if (result.error) throw new Error(`${label}: ${result.error.message}`);
