@@ -6,6 +6,14 @@ const Auth = {
   USERS_KEY: "lmsUsers",
   CURRENT_USER_KEY: "lmsCurrentUser",
   SESSION_KEY: "lmsSessionToken",
+  withoutLegacyClassFields(user) {
+    if (!user || typeof user !== "object") return user;
+    const sanitized = { ...user };
+    delete sanitized.enrolledClasses;
+    delete sanitized.taughtClasses;
+    return sanitized;
+  },
+
   defaultAdmin: {
     name: "Web Admin",
     email: "webadmin@lms.local",
@@ -15,24 +23,6 @@ const Auth = {
       notifications: true
     },
     password: "Admin@123",
-    taughtClasses: [
-      {
-        id: "class_admin_math_001",
-        name: "Advanced Mathematics",
-        subject: "Mathematics",
-        students: [],
-        pendingRequests: [],
-        createdAt: "2024-01-01T00:00:00.000Z"
-      },
-      {
-        id: "class_admin_science_001",
-        name: "Physics Fundamentals",
-        subject: "Physics",
-        students: [],
-        pendingRequests: [],
-        createdAt: "2024-01-01T00:00:00.000Z"
-      }
-    ]
   },
 
   async hashPassword(password) {
@@ -62,7 +52,8 @@ const Auth = {
       // Fallback to localStorage
       try {
         const data = localStorage.getItem(this.USERS_KEY);
-        return data ? JSON.parse(data) : [];
+        const users = data ? JSON.parse(data) : [];
+        return Array.isArray(users) ? users.map((user) => this.withoutLegacyClassFields(user)) : [];
       } catch (e) {
         console.warn("Auth read users error:", e);
         return [];
@@ -76,12 +67,15 @@ const Auth = {
     const timeoutMs = 20000;
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    const sanitizedUsers = Array.isArray(users)
+      ? users.map((user) => this.withoutLegacyClassFields(user))
+      : users;
 
     try {
       const response = await fetch(`/api/users`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(users),
+        body: JSON.stringify(sanitizedUsers),
         signal: controller.signal
       });
       if (!response.ok) {
@@ -93,7 +87,7 @@ const Auth = {
       console.error("API Error (POST users):", error);
       // Keep a recovery copy, but allow shared-data workflows to fail visibly.
       try {
-        localStorage.setItem(this.USERS_KEY, JSON.stringify(users));
+        localStorage.setItem(this.USERS_KEY, JSON.stringify(sanitizedUsers));
       } catch (e) {
         console.warn("Auth save users error:", e);
       }
@@ -105,11 +99,17 @@ const Auth = {
   },
 
   getCurrentUser() {
-    return Storage.getCurrentUser();
+    const user = Storage.getCurrentUser();
+    if (!user || typeof user !== "object") return user;
+    const hasLegacyClassFields = Object.prototype.hasOwnProperty.call(user, "enrolledClasses")
+      || Object.prototype.hasOwnProperty.call(user, "taughtClasses");
+    const sanitized = this.withoutLegacyClassFields(user);
+    if (hasLegacyClassFields) this.saveCurrentUser(sanitized);
+    return sanitized;
   },
 
   saveCurrentUser(user) {
-    return Storage.saveCurrentUser(user);
+    return Storage.saveCurrentUser(this.withoutLegacyClassFields(user));
   },
 
   clearCurrentUser() {
@@ -130,7 +130,6 @@ const Auth = {
         status: this.defaultAdmin.status,
         preferences: this.defaultAdmin.preferences,
         passwordHash,
-        taughtClasses: this.defaultAdmin.taughtClasses || [],
         createdAt: new Date().toISOString(),
         lastSignedIn: new Date().toISOString()
       };
@@ -199,9 +198,7 @@ const Auth = {
       },
       passwordHash,
       createdAt: new Date().toISOString(),
-      lastSignedIn: new Date().toISOString(),
-      ...(sanitizedStatus === 'Student' && { enrolledClasses: [] }),
-      ...((sanitizedStatus === 'Teacher' || sanitizedStatus === 'Administrator') && { taughtClasses: [] })
+      lastSignedIn: new Date().toISOString()
     };
 
     const users = await this.getUsers();
@@ -216,9 +213,7 @@ const Auth = {
       email: publicUser.email,
       status: publicUser.status,
       preferences: publicUser.preferences,
-      lastSignedIn: new Date().toISOString(),
-      enrolledClasses: newUser.enrolledClasses || [],
-      taughtClasses: newUser.taughtClasses || []
+      lastSignedIn: new Date().toISOString()
     };
 
     this.saveCurrentUser(currentUser);
@@ -266,9 +261,7 @@ const Auth = {
           autoLogin: Boolean(remember),
           notifications: Boolean(found.preferences.notifications)
         },
-        lastSignedIn: found.lastSignedIn || new Date().toISOString(),
-        enrolledClasses: found.enrolledClasses || [],
-        taughtClasses: found.taughtClasses || []
+        lastSignedIn: found.lastSignedIn || new Date().toISOString()
       };
 
       this.saveCurrentUser(currentUser);
@@ -303,9 +296,7 @@ const Auth = {
           autoLogin: Boolean(remember),
           notifications: Boolean(found.preferences?.notifications)
         },
-        lastSignedIn: userIndex !== -1 ? users[userIndex].lastSignedIn : found.lastSignedIn || new Date().toISOString(),
-        enrolledClasses: found.enrolledClasses || [],
-        taughtClasses: found.taughtClasses || []
+        lastSignedIn: userIndex !== -1 ? users[userIndex].lastSignedIn : found.lastSignedIn || new Date().toISOString()
       };
 
       this.saveCurrentUser(currentUser);

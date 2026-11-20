@@ -109,7 +109,7 @@ async function getUserData() {
     requireSupabase();
     const rows = await getAllRows(
         "users",
-        "id, email, name, status, preferences, passwordHash, school_id, createdAt, lastSignedIn, enrolledClasses, taughtClasses",
+        "id, email, name, status, preferences, passwordHash, school_id, createdAt, lastSignedIn",
         ["id"]
     );
     return rows.map((row) => ({
@@ -121,9 +121,7 @@ async function getUserData() {
         passwordHash: row.passwordHash,
         school_id: row.school_id || null,
         createdAt: row.createdAt,
-        lastSignedIn: row.lastSignedIn,
-        enrolledClasses: row.enrolledClasses || [],
-        taughtClasses: row.taughtClasses || []
+        lastSignedIn: row.lastSignedIn
     }));
 }
 
@@ -153,6 +151,7 @@ async function saveUserData(updatedUsers) {
         if (!existing) {
             const { error } = await supabase.from("users").insert({
                 ...record,
+                // Keep legacy columns empty for schema compatibility; class data lives in normalized tables.
                 enrolledClasses: [],
                 taughtClasses: []
             });
@@ -567,9 +566,7 @@ function sanitizeUserForClient(user) {
         school_id: user.school_id || null,
         preferences: typeof user.preferences === 'object' ? user.preferences : {},
         createdAt: String(user.createdAt || ""),
-        lastSignedIn: String(user.lastSignedIn || ""),
-        enrolledClasses: Array.isArray(user.enrolledClasses) ? user.enrolledClasses : [],
-        taughtClasses: Array.isArray(user.taughtClasses) ? user.taughtClasses : []
+        lastSignedIn: String(user.lastSignedIn || "")
     };
     return sanitized;
 }
