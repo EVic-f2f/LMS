@@ -3,7 +3,7 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const { isDeepStrictEqual } = require("util");
-const { mergeNormalizedClassData } = require("./Helpers/normalized_data_utils");
+const { legacyIdToUuid } = require("./Helpers/normalized_data_utils");
 
 
 const { createClient } = require("@supabase/supabase-js");
@@ -84,11 +84,11 @@ async function initializeDatabase() {
     fs.mkdirSync(filesFolder, { recursive: true });
 }
 
-async function getAllRows(table, columns, orderColumns) {
+async function getPagedRows(queryFactory, orderColumns = []) {
     const pageSize = 500;
     const rows = [];
     for (let from = 0; ; from += pageSize) {
-        let query = supabase.from(table).select(columns);
+        let query = queryFactory();
         for (const column of orderColumns) {
             query = query.order(column, { ascending: true });
         }
@@ -100,7 +100,11 @@ async function getAllRows(table, columns, orderColumns) {
     }
 }
 
-async function getUserData({ includeNormalizedClasses = false } = {}) {
+async function getAllRows(table, columns, orderColumns) {
+    return getPagedRows(() => supabase.from(table).select(columns), orderColumns);
+}
+
+async function getUserData() {
     // Service role bypasses RLS; requires SUPABASE_SERVICE_ROLE_KEY.
     requireSupabase();
     const rows = await getAllRows(
@@ -108,7 +112,7 @@ async function getUserData({ includeNormalizedClasses = false } = {}) {
         "id, email, name, status, preferences, passwordHash, school_id, createdAt, lastSignedIn, enrolledClasses, taughtClasses",
         ["id"]
     );
-    const users = rows.map((row) => ({
+    return rows.map((row) => ({
         id: row.id,
         email: row.email,
         name: row.name,
@@ -121,25 +125,13 @@ async function getUserData({ includeNormalizedClasses = false } = {}) {
         enrolledClasses: row.enrolledClasses || [],
         taughtClasses: row.taughtClasses || []
     }));
-
-    if (includeNormalizedClasses) {
-        const [classes, members, classwork, grades] = await Promise.all([
-            getAllRows("classes", "id, school_id, name, subject, created_by, created_at", ["id"]),
-            getAllRows("class_members", "class_id, user_id, role", ["class_id", "user_id"]),
-            getAllRows("classwork", "id, class_id, title", ["id"]),
-            getAllRows("grades", "id, classwork_id, student_id, score, updated_at", ["id"])
-        ]);
-        mergeNormalizedClassData(users, classes, members, classwork, grades);
-    }
-
-    return users;
 }
 
 
 async function saveUserData(updatedUsers) {
     const existingRows = await getAllRows(
         "users",
-        "email, name, status, preferences, passwordHash, school_id, createdAt, lastSignedIn, enrolledClasses, taughtClasses",
+        "email, name, status, preferences, passwordHash, school_id, createdAt, lastSignedIn",
         ["email"]
     );
     const existingByEmail = new Map(existingRows.map((row) => [String(row.email).toLowerCase(), row]));
@@ -153,27 +145,20 @@ async function saveUserData(updatedUsers) {
             preferences: user.preferences || {},
             school_id: user.school_id || null,
             createdAt: String(user.createdAt || ""),
-            lastSignedIn: String(user.lastSignedIn || ""),
-            enrolledClasses: user.enrolledClasses || [],
-            taughtClasses: user.taughtClasses || []
+            lastSignedIn: String(user.lastSignedIn || "")
         };
         if (passwordHash) record.passwordHash = passwordHash;
 
         const existing = existingByEmail.get(record.email.toLowerCase());
         if (!existing) {
-            const { error } = await supabase.from("users").insert(record);
+            const { error } = await supabase.from("users").insert({
+                ...record,
+                enrolledClasses: [],
+                taughtClasses: []
+            });
             if (error) throw error;
             continue;
         }
-
-        const priorClasses = new Map((existing.taughtClasses || []).map((classInfo) => [String(classInfo.id), classInfo]));
-        record.taughtClasses = record.taughtClasses.map((classInfo) => {
-            const priorClass = priorClasses.get(String(classInfo.id));
-            if (classInfo.studentGrades && (!priorClass || !isDeepStrictEqual(priorClass.studentGrades, classInfo.studentGrades))) {
-                return { ...classInfo, studentGradesUpdatedAt: new Date().toISOString() };
-            }
-            return classInfo;
-        });
 
         const changed = Object.entries(record).some(([key, value]) => !isDeepStrictEqual(existing[key], value));
         if (!changed) continue;
@@ -185,10 +170,243 @@ async function saveUserData(updatedUsers) {
     return updatedUsers;
 }
 
+function httpError(message, statusCode) {
+    const error = new Error(message);
+    error.statusCode = statusCode;
+    return error;
+}
+
+function isUuid(value) {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || ""));
+}
+
+async function getAuthenticatedUser(req) {
+    const email = getSessionEmail(req);
+    const { data: user, error } = await requireSupabase()
+        .from("users")
+        .select("id, email, name, status, school_id")
+        .ilike("email", email)
+        .maybeSingle();
+    if (error) throw error;
+    if (!user) throw httpError("User account not found.", 401);
+    return user;
+}
+
+async function getAuthorizedSchoolId(req, user, requestedSchoolId) {
+    let schoolId = String(requestedSchoolId || req.headers["x-school-id"] || user.school_id || "").trim();
+    if (!schoolId) {
+        const { data: membership, error } = await requireSupabase()
+            .from("school_memberships")
+            .select("school_id")
+            .eq("user_id", user.id)
+            .eq("status", "active")
+            .order("school_id", { ascending: true })
+            .limit(1)
+            .maybeSingle();
+        if (error) throw error;
+        schoolId = String(membership?.school_id || "");
+    }
+    if (!schoolId) throw httpError("Join a school before using classes.", 403);
+
+    if (String(user.school_id || "") !== schoolId) {
+        const { data: membership, error } = await requireSupabase()
+            .from("school_memberships")
+            .select("school_id")
+            .eq("user_id", user.id)
+            .eq("school_id", schoolId)
+            .eq("status", "active")
+            .maybeSingle();
+        if (error) throw error;
+        if (!membership) throw httpError("You do not have access to this school.", 403);
+    }
+    return schoolId;
+}
+
+async function readJsonBody(req) {
+    const buffer = await readRequestBuffer(req, 2 * 1024 * 1024);
+    try {
+        return JSON.parse(buffer.toString("utf8") || "{}");
+    } catch {
+        throw httpError("Invalid JSON request body.", 400);
+    }
+}
+
+async function listClassesForUser(user, schoolId) {
+    const isStudent = String(user.status) === "Student";
+    const isAdministrator = ["Admin", "Administrator", "School Administrator"].includes(String(user.status));
+    const classRows = await getPagedRows(() => {
+        let query = requireSupabase()
+            .from("classes")
+            .select("id, school_id, name, subject, created_by, created_at")
+            .eq("school_id", schoolId);
+        if (!isStudent && !isAdministrator) query = query.eq("created_by", user.id);
+        return query;
+    }, ["id"]);
+    const classIds = classRows.map((classRow) => classRow.id);
+    if (!classIds.length) return [];
+
+    const [members, requests] = await Promise.all([
+        getPagedRows(
+            () => requireSupabase().from("class_members").select("class_id, user_id, role").in("class_id", classIds),
+            ["class_id", "user_id"]
+        ),
+        getPagedRows(() => {
+            let query = requireSupabase()
+                .from("class_join_requests")
+                .select("id, class_id, student_id, status, requested_at")
+                .in("class_id", classIds);
+            if (isStudent) query = query.eq("student_id", user.id);
+            else query = query.eq("status", "pending");
+            return query;
+        }, ["class_id", "requested_at"])
+    ]);
+
+    const userIds = [...new Set([
+        ...classRows.map((classRow) => String(classRow.created_by)),
+        ...members.map((member) => String(member.user_id)),
+        ...requests.map((request) => String(request.student_id))
+    ])];
+    const relatedUsers = userIds.length
+        ? await getPagedRows(
+            () => requireSupabase().from("users").select("id, email, name, status").in("id", userIds),
+            ["id"]
+        )
+        : [];
+    const usersById = new Map(relatedUsers.map((relatedUser) => [String(relatedUser.id), relatedUser]));
+    const membersByClass = new Map();
+    for (const member of members) {
+        const classId = String(member.class_id);
+        if (!membersByClass.has(classId)) membersByClass.set(classId, []);
+        membersByClass.get(classId).push(member);
+    }
+    const requestsByClass = new Map();
+    for (const request of requests) {
+        const classId = String(request.class_id);
+        if (!requestsByClass.has(classId)) requestsByClass.set(classId, []);
+        requestsByClass.get(classId).push(request);
+    }
+
+    return classRows.map((classRow) => {
+        const classId = String(classRow.id);
+        const classMembers = membersByClass.get(classId) || [];
+        const classRequests = requestsByClass.get(classId) || [];
+        const teacher = usersById.get(String(classRow.created_by));
+        return {
+            id: classRow.id,
+            school_id: classRow.school_id,
+            name: classRow.name,
+            subject: classRow.subject || "",
+            createdAt: classRow.created_at,
+            teacher: teacher ? { email: teacher.email, name: teacher.name } : null,
+            studentCount: classMembers.filter((member) => String(member.role).toLowerCase() === "student").length,
+            isEnrolled: classMembers.some((member) =>
+                String(member.user_id) === String(user.id) && String(member.role).toLowerCase() === "student"
+            ),
+            hasPendingRequest: classRequests.some((request) =>
+                String(request.student_id) === String(user.id) && request.status === "pending"
+            ),
+            pendingRequests: isStudent ? [] : classRequests
+                .filter((request) => request.status === "pending")
+                .map((request) => {
+                    const student = usersById.get(String(request.student_id));
+                    return {
+                        id: request.id,
+                        studentEmail: student?.email || "",
+                        studentName: student?.name || student?.email || "Student",
+                        requestedAt: request.requested_at
+                    };
+                })
+        };
+    });
+}
+
+async function getClassDetails(classRow, viewer) {
+    const [members, classwork] = await Promise.all([
+        getPagedRows(
+            () => requireSupabase().from("class_members").select("user_id, role").eq("class_id", classRow.id),
+            ["user_id"]
+        ),
+        getPagedRows(
+            () => requireSupabase().from("classwork").select("id, title").eq("class_id", classRow.id),
+            ["title", "id"]
+        )
+    ]);
+    const isOwner = String(classRow.created_by) === String(viewer.id);
+    const isAdministrator = ["Admin", "Administrator", "School Administrator"].includes(String(viewer.status));
+    const canManage = isOwner || isAdministrator;
+    const viewerMembership = members.find((member) => String(member.user_id) === String(viewer.id));
+    if (!canManage && !viewerMembership) throw httpError("You do not have access to this class.", 403);
+
+    const requestQuery = () => {
+        let query = requireSupabase()
+            .from("class_join_requests")
+            .select("id, student_id, status, requested_at")
+            .eq("class_id", classRow.id);
+        query = query.eq("status", "pending");
+        if (!canManage) query = query.eq("student_id", viewer.id);
+        return query;
+    };
+    const [requests, grades] = await Promise.all([
+        getPagedRows(requestQuery, ["requested_at", "id"]),
+        classwork.length
+            ? getPagedRows(() => {
+                let query = requireSupabase()
+                    .from("grades")
+                    .select("classwork_id, student_id, score")
+                    .in("classwork_id", classwork.map((item) => item.id));
+                if (!canManage) query = query.eq("student_id", viewer.id);
+                return query;
+            }, ["student_id", "classwork_id"])
+            : Promise.resolve([])
+    ]);
+
+    const userIds = [...new Set([
+        String(classRow.created_by),
+        ...members.map((member) => String(member.user_id)),
+        ...requests.map((request) => String(request.student_id))
+    ])];
+    const relatedUsers = await getPagedRows(
+        () => requireSupabase().from("users").select("id, email, name, status").in("id", userIds),
+        ["id"]
+    );
+    const usersById = new Map(relatedUsers.map((user) => [String(user.id), user]));
+    const teacher = usersById.get(String(classRow.created_by));
+    const studentGrades = {};
+    const classworkById = new Map(classwork.map((item) => [String(item.id), item]));
+    for (const grade of grades) {
+        const student = usersById.get(String(grade.student_id));
+        const work = classworkById.get(String(grade.classwork_id));
+        if (!student?.email || !work?.title) continue;
+        const email = String(student.email).toLowerCase();
+        if (!studentGrades[email]) studentGrades[email] = {};
+        studentGrades[email][work.title] = grade.score === null || grade.score === undefined ? "" : String(grade.score);
+    }
+
+    return {
+        id: classRow.id,
+        school_id: classRow.school_id,
+        name: classRow.name,
+        subject: classRow.subject || "",
+        createdAt: classRow.created_at,
+        teacher: teacher ? { id: teacher.id, email: teacher.email, name: teacher.name } : null,
+        students: members
+            .filter((member) => String(member.role).toLowerCase() === "student")
+            .map((member) => usersById.get(String(member.user_id)))
+            .filter(Boolean)
+            .map((student) => ({ id: student.id, email: student.email, name: student.name })),
+        pendingRequests: canManage ? requests.filter((request) => request.status === "pending").map((request) => {
+            const student = usersById.get(String(request.student_id));
+            return { id: request.id, studentEmail: student?.email || "", studentName: student?.name || "Student", requestedAt: request.requested_at };
+        }) : [],
+        isEnrolled: Boolean(viewerMembership && String(viewerMembership.role).toLowerCase() === "student"),
+        studentGrades
+    };
+}
+
 
 function setCorsHeaders(res) {
     res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
     res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-File-Name, X-School-Id, X-Class-Id");
 }
 
@@ -256,69 +474,31 @@ function getSessionEmail(req) {
 }
 
 async function getStorageScope(req) {
-    const email = getSessionEmail(req);
-    const { data: user, error: userError } = await requireSupabase()
-        .from("users")
-        .select("id, email, status, school_id, enrolledClasses, taughtClasses")
-        .ilike("email", email)
-        .maybeSingle();
-    if (userError) throw userError;
-    if (!user) {
-        const error = new Error("User account not found.");
-        error.statusCode = 401;
-        throw error;
-    }
-
-    const requestedSchoolId = String(req.headers["x-school-id"] || "").trim();
-    let schoolId = requestedSchoolId || user.school_id;
-    if (requestedSchoolId && String(user.school_id) !== requestedSchoolId) {
-        const { data: membership, error: membershipError } = await supabase
-            .from("school_memberships")
-            .select("school_id")
-            .eq("user_id", user.id)
-            .eq("school_id", requestedSchoolId)
-            .eq("status", "active")
-            .maybeSingle();
-        if (membershipError) throw membershipError;
-        if (!membership) {
-            const error = new Error("You do not have access to this school.");
-            error.statusCode = 403;
-            throw error;
-        }
-        schoolId = membership.school_id;
-    }
-
-    if (!schoolId) {
-        const { data: membership, error: membershipError } = await supabase
-            .from("school_memberships")
-            .select("school_id")
-            .eq("user_id", user.id)
-            .eq("status", "active")
-            .limit(1)
-            .maybeSingle();
-        if (membershipError) throw membershipError;
-        schoolId = membership?.school_id;
-    }
-    if (!schoolId) {
-        const error = new Error("Join a school before using file storage.");
-        error.statusCode = 403;
-        throw error;
-    }
+    const user = await getAuthenticatedUser(req);
+    const schoolId = await getAuthorizedSchoolId(req, user, req.headers["x-school-id"]);
 
     const classId = String(req.headers["x-class-id"] || "").trim();
     const isAdministrator = ["Admin", "Administrator", "School Administrator"].includes(String(user.status));
     if (!classId) {
         return { user, schoolId, prefix: `schools/${schoolId}/users/${user.id}`, canWrite: true };
     }
-    if (!/^[A-Za-z0-9_-]+$/.test(classId)) {
-        const error = new Error("Invalid class identifier.");
-        error.statusCode = 400;
+    if (!isUuid(classId)) throw httpError("Invalid class identifier.", 400);
+
+    const [{ data: classRow, error: classError }, { data: membership, error: membershipError }] = await Promise.all([
+        supabase.from("classes").select("id, school_id, created_by").eq("id", classId).maybeSingle(),
+        supabase.from("class_members").select("class_id, role").eq("class_id", classId).eq("user_id", user.id).maybeSingle()
+    ]);
+    if (classError) throw classError;
+    if (membershipError) throw membershipError;
+    if (!classRow || String(classRow.school_id) !== String(schoolId)) {
+        const error = new Error("Class not found in this school.");
+        error.statusCode = 404;
         throw error;
     }
 
-    const ownsClass = (user.taughtClasses || []).some((classInfo) => String(classInfo.id) === classId);
-    const isEnrolled = (user.enrolledClasses || []).map(String).includes(classId);
-    if (!ownsClass && !isEnrolled && !isAdministrator) {
+    const ownsClass = String(classRow.created_by) === String(user.id);
+    const isMember = Boolean(membership);
+    if (!ownsClass && !isMember && !isAdministrator) {
         const error = new Error("You do not have access to this class.");
         error.statusCode = 403;
         throw error;
@@ -486,6 +666,8 @@ function initializeRealtime() {
         "school_memberships",
         "school_join_requests",
         "classes",
+        "class_members",
+        "class_join_requests",
         "classwork",
         "grades",
         "school_settings",
@@ -583,7 +765,7 @@ function handleRequest(req, res) {
         }
 
         if (req.method === "GET") {
-            getUserData({ includeNormalizedClasses: url.searchParams.get("includeClasses") === "true" })
+            getUserData()
                 .then((data) => sendJson(res, 200, data.map(sanitizeUserForClient)))
                 .catch((err) => sendJson(res, 500, { success: false, error: err.message }));
             return;
@@ -611,6 +793,284 @@ function handleRequest(req, res) {
         }
 
         sendJson(res, 405, { error: "Method not allowed" });
+        return;
+    }
+
+    const classApiMatch = pathname === "/api/classes"
+        || /^\/api\/classes\/[^/]+(?:\/join-requests(?:\/[^/]+\/respond)?|\/grades)?$/.test(pathname);
+    if (classApiMatch) {
+        setCorsHeaders(res);
+        if (req.method === "OPTIONS") {
+            res.writeHead(204);
+            res.end();
+            return;
+        }
+
+        (async () => {
+            const segments = pathname.split("/").filter(Boolean);
+            if (req.method === "GET" && segments.length === 2) {
+                const user = await getAuthenticatedUser(req);
+                const schoolId = await getAuthorizedSchoolId(req, user, url.searchParams.get("schoolId"));
+                sendJson(res, 200, await listClassesForUser(user, schoolId));
+                return;
+            }
+
+            if (req.method === "POST" && segments.length === 2) {
+                const user = await getAuthenticatedUser(req);
+                if (!["Teacher", "School Administrator", "Administrator", "Admin"].includes(String(user.status))) {
+                    throw httpError("Only teachers and administrators can create classes.", 403);
+                }
+                const body = await readJsonBody(req);
+                const name = String(body.name || "").trim();
+                const subject = String(body.subject || "").trim();
+                if (!name || !subject) throw httpError("Class name and subject are required.", 400);
+                if (name.length > 120 || subject.length > 120) throw httpError("Class name and subject must be 120 characters or fewer.", 400);
+                const schoolId = await getAuthorizedSchoolId(req, user, body.schoolId);
+                const classId = crypto.randomUUID();
+                const supabaseClient = requireSupabase();
+                const { error: classError } = await supabaseClient.from("classes").insert({
+                    id: classId,
+                    school_id: schoolId,
+                    name,
+                    subject,
+                    created_by: user.id
+                });
+                if (classError) throw classError;
+                const { error: memberError } = await supabaseClient.from("class_members").upsert(
+                    { class_id: classId, user_id: user.id, role: "Teacher" },
+                    { onConflict: "class_id,user_id" }
+                );
+                if (memberError) {
+                    const { error: cleanupError } = await supabaseClient.from("classes").delete().eq("id", classId);
+                    if (cleanupError) console.error("Could not remove class after membership creation failed:", cleanupError.message);
+                    throw memberError;
+                }
+                sendJson(res, 201, { success: true, id: classId });
+                return;
+            }
+
+            if (segments.length < 3) throw httpError("Method not allowed.", 405);
+            const classId = segments[2];
+            if (!isUuid(classId)) throw httpError("Invalid class identifier.", 400);
+            const supabaseClient = requireSupabase();
+            const user = await getAuthenticatedUser(req);
+            const { data: classRow, error: classError } = await supabaseClient
+                .from("classes")
+                .select("id, school_id, name, subject, created_by, created_at")
+                .eq("id", classId)
+                .maybeSingle();
+            if (classError) throw classError;
+            if (!classRow) throw httpError("Class not found.", 404);
+            await getAuthorizedSchoolId(req, user, classRow.school_id);
+
+            if (req.method === "GET" && segments.length === 3) {
+                sendJson(res, 200, await getClassDetails(classRow, user));
+                return;
+            }
+
+            if (req.method === "POST" && segments.length === 4 && segments[3] === "join-requests") {
+                if (String(user.status) !== "Student") throw httpError("Only students can request to join a class.", 403);
+                const { data: existingMember, error: memberCheckError } = await supabaseClient
+                    .from("class_members")
+                    .select("class_id")
+                    .eq("class_id", classId)
+                    .eq("user_id", user.id)
+                    .maybeSingle();
+                if (memberCheckError) throw memberCheckError;
+                if (existingMember) throw httpError("You are already enrolled in this class.", 409);
+
+                const { data: pendingRequest, error: requestCheckError } = await supabaseClient
+                    .from("class_join_requests")
+                    .select("id")
+                    .eq("class_id", classId)
+                    .eq("student_id", user.id)
+                    .eq("status", "pending")
+                    .maybeSingle();
+                if (requestCheckError) throw requestCheckError;
+                if (pendingRequest) throw httpError("You already have a pending request for this class.", 409);
+
+                const { error: insertError } = await supabaseClient.from("class_join_requests").insert({
+                    class_id: classId,
+                    student_id: user.id,
+                    status: "pending"
+                });
+                if (insertError) {
+                    if (insertError.code === "23505") throw httpError("You already have a pending request for this class.", 409);
+                    throw insertError;
+                }
+                sendJson(res, 201, { success: true });
+                return;
+            }
+
+            if (req.method === "POST" && segments.length === 6 && segments[3] === "join-requests" && segments[5] === "respond") {
+                const body = await readJsonBody(req);
+                const action = String(body.action || "").toLowerCase();
+                if (action !== "accept" && action !== "reject") throw httpError("Choose accept or reject.", 400);
+                const isOwner = String(classRow.created_by) === String(user.id);
+                const isAdministrator = ["Admin", "Administrator", "School Administrator"].includes(String(user.status));
+                if (!isOwner && !isAdministrator) throw httpError("Only the class teacher or a school administrator can review requests.", 403);
+
+                const requestId = segments[4];
+                if (!isUuid(requestId)) throw httpError("Invalid join request identifier.", 400);
+                const { data: joinRequest, error: requestError } = await supabaseClient
+                    .from("class_join_requests")
+                    .select("id, student_id, status")
+                    .eq("id", requestId)
+                    .eq("class_id", classId)
+                    .eq("status", "pending")
+                    .maybeSingle();
+                if (requestError) throw requestError;
+                if (!joinRequest) throw httpError("Pending join request not found.", 404);
+
+                const { data: updatedRequest, error: updateError } = await supabaseClient
+                    .from("class_join_requests")
+                    .update({
+                        status: action === "accept" ? "accepted" : "rejected",
+                        reviewed_at: new Date().toISOString(),
+                        reviewed_by: user.id
+                    })
+                    .eq("id", joinRequest.id)
+                    .eq("status", "pending")
+                    .select("id")
+                    .maybeSingle();
+                if (updateError) throw updateError;
+                if (!updatedRequest) throw httpError("This join request has already been reviewed.", 409);
+
+                if (action === "accept") {
+                    const { error: memberError } = await supabaseClient.from("class_members").upsert(
+                        { class_id: classId, user_id: joinRequest.student_id, role: "Student" },
+                        { onConflict: "class_id,user_id" }
+                    );
+                    if (memberError) {
+                        const { error: rollbackError } = await supabaseClient
+                            .from("class_join_requests")
+                            .update({ status: "pending", reviewed_at: null, reviewed_by: null })
+                            .eq("id", joinRequest.id)
+                            .eq("status", "accepted");
+                        if (rollbackError) console.error("Could not reopen join request after enrollment failed:", rollbackError.message);
+                        throw memberError;
+                    }
+                }
+                sendJson(res, 200, { success: true });
+                return;
+            }
+
+            if (req.method === "PUT" && segments.length === 4 && segments[3] === "grades") {
+                const isOwner = String(classRow.created_by) === String(user.id);
+                const isAdministrator = ["Admin", "Administrator", "School Administrator"].includes(String(user.status));
+                if (!isOwner && !isAdministrator) throw httpError("Only the class teacher or a school administrator can save grades.", 403);
+
+                const body = await readJsonBody(req);
+                const studentGrades = body.studentGrades;
+                if (!studentGrades || typeof studentGrades !== "object" || Array.isArray(studentGrades)) {
+                    throw httpError("Student grades must be an object.", 400);
+                }
+                const fields = [...new Set(Object.keys(studentGrades).flatMap((email) =>
+                    studentGrades[email] && typeof studentGrades[email] === "object"
+                        ? Object.keys(studentGrades[email])
+                        : []
+                ))];
+                if (fields.some((field) => !field.trim() || field.length > 120)) {
+                    throw httpError("Grade field names must be 1 to 120 characters.", 400);
+                }
+                const [members, existingWork] = await Promise.all([
+                    getPagedRows(
+                        () => supabaseClient.from("class_members").select("user_id, role").eq("class_id", classId),
+                        ["user_id"]
+                    ),
+                    getPagedRows(
+                        () => supabaseClient.from("classwork").select("id, title").eq("class_id", classId),
+                        ["title", "id"]
+                    )
+                ]);
+                const enrolledIds = new Set((members || [])
+                    .filter((member) => String(member.role).toLowerCase() === "student")
+                    .map((member) => String(member.user_id)));
+                const students = enrolledIds.size
+                    ? await getPagedRows(
+                        () => supabaseClient.from("users").select("id, email").in("id", [...enrolledIds]),
+                        ["id"]
+                    )
+                    : [];
+                const studentsByEmail = new Map((students || []).map((student) => [String(student.email).toLowerCase(), student]));
+                const workByTitle = new Map((existingWork || []).map((work) => [String(work.title), work]));
+                const workRows = [];
+                for (const field of fields) {
+                    if (!workByTitle.has(field)) {
+                        const work = {
+                            id: legacyIdToUuid(`${classId}:grade:${field}`),
+                            class_id: classId,
+                            title: field,
+                            description: "Grade field",
+                            created_by: user.id
+                        };
+                        workByTitle.set(field, work);
+                        workRows.push(work);
+                    }
+                }
+                if (workRows.length) {
+                    const { error } = await supabaseClient.from("classwork").upsert(workRows, { onConflict: "id" });
+                    if (error) throw error;
+                }
+
+                const studentIds = [...studentsByEmail.values()]
+                    .filter((student) => enrolledIds.has(String(student.id)))
+                    .map((student) => student.id);
+                const workIds = [...workByTitle.values()].map((work) => work.id);
+                const existingGrades = studentIds.length && workIds.length
+                    ? await getPagedRows(
+                        () => supabaseClient.from("grades")
+                            .select("id, classwork_id, student_id")
+                            .in("classwork_id", workIds)
+                            .in("student_id", studentIds),
+                        ["classwork_id", "student_id"]
+                    )
+                    : [];
+                const existingGradeIds = new Map(existingGrades.map((grade) => [
+                    `${grade.classwork_id}:${grade.student_id}`,
+                    grade.id
+                ]));
+                const gradeRows = [];
+                const updatedAt = new Date().toISOString();
+                for (const [emailKey, gradesByField] of Object.entries(studentGrades)) {
+                    const student = studentsByEmail.get(String(emailKey).trim().toLowerCase());
+                    if (!student || !enrolledIds.has(String(student.id))) {
+                        throw httpError(`Student ${emailKey} is not enrolled in this class.`, 400);
+                    }
+                    if (!gradesByField || typeof gradesByField !== "object" || Array.isArray(gradesByField)) {
+                        throw httpError(`Grades for ${emailKey} must be an object.`, 400);
+                    }
+                    for (const [field, rawScore] of Object.entries(gradesByField)) {
+                        const cleanedScore = String(rawScore ?? "").trim();
+                        const score = cleanedScore === "" ? null : Number(cleanedScore);
+                        if (score !== null && (!Number.isFinite(score) || score < 0 || score > 100)) {
+                            throw httpError(`Grade for ${emailKey} in ${field} must be between 0 and 100.`, 400);
+                        }
+                        const work = workByTitle.get(field);
+                        if (!work) throw httpError(`Unknown grade field: ${field}.`, 400);
+                        const gradeKey = `${work.id}:${student.id}`;
+                        gradeRows.push({
+                            id: existingGradeIds.get(gradeKey) || legacyIdToUuid(`${work.id}:student:${student.id}`),
+                            classwork_id: work.id,
+                            student_id: student.id,
+                            score,
+                            updated_at: updatedAt
+                        });
+                    }
+                }
+                if (gradeRows.length) {
+                    const { error } = await supabaseClient.from("grades").upsert(gradeRows, { onConflict: "id" });
+                    if (error) throw error;
+                }
+                sendJson(res, 200, { success: true });
+                return;
+            }
+
+            throw httpError("Method not allowed.", 405);
+        })().catch((error) => {
+            console.error("Class API request failed:", error);
+            sendJson(res, error.statusCode || 500, { success: false, error: error.message || "Class request failed." });
+        });
         return;
     }
 

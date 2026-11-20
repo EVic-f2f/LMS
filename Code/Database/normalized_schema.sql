@@ -1,7 +1,8 @@
 -- Existing Supabase schema reference only.
 -- DO NOT run this file as a table-creation migration.
 -- The normalized tables already exist and use UUID foreign keys.
--- Run Code/Helpers/migrate_normalized_data.js to populate them.
+-- Run Code/Database/class_join_requests.sql first if that table is not present,
+-- then run Code/Helpers/migrate_normalized_data.js to populate the tables.
 
 -- Expected normalized tables and key columns:
 -- school_settings: school_id, location, grade_fields, api_endpoint
@@ -11,6 +12,8 @@
 -- school_join_requests: user_id, school_id, status, reviewed_by
 -- classes: id uuid, school_id, name, subject, created_by uuid, created_at
 -- class_members: class_id uuid, user_id uuid, role, joined_at
+-- class_join_requests: id uuid, class_id uuid, student_id uuid, status, requested_at,
+--                     reviewed_at, reviewed_by
 -- classwork: id uuid, class_id uuid, title, description, due_at, created_by uuid
 -- grades: id uuid, classwork_id uuid, student_id uuid, score, updated_at
 -- files: id uuid, school_id uuid, class_id uuid, uploaded_by uuid,

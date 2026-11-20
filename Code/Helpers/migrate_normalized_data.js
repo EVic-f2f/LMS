@@ -47,6 +47,7 @@ async function verifySchema() {
     school_join_requests: ['id', 'user_id', 'school_id', 'status', 'reviewed_by'],
     classes: ['id', 'school_id', 'name', 'subject', 'created_by', 'created_at'],
     class_members: ['class_id', 'user_id', 'role', 'joined_at'],
+    class_join_requests: ['id', 'class_id', 'student_id', 'status', 'requested_at', 'reviewed_at', 'reviewed_by'],
     classwork: ['id', 'class_id', 'title', 'description', 'due_at', 'created_by'],
     grades: ['id', 'classwork_id', 'student_id', 'score', 'updated_at'],
     files: ['id', 'school_id', 'class_id', 'uploaded_by', 'filename', 'storage_path', 'created_at'],
@@ -77,6 +78,7 @@ async function migrate() {
   const memberships = [];
   const classes = new Map();
   const classMembers = [];
+  const classJoinRequests = [];
   const pendingEnrollments = [];
   const settings = [];
   const themes = [];
@@ -157,6 +159,20 @@ async function migrate() {
         const student = usersByEmail.get(String(studentEmail).toLowerCase());
         if (student) classMembers.push({ class_id: classId, user_id: student.id, role: 'Student' });
       }
+      for (const request of asArray(classInfo.pendingRequests)) {
+        const studentEmail = String(request.studentEmail || '').trim().toLowerCase();
+        const student = usersByEmail.get(studentEmail);
+        if (!student) continue;
+        classJoinRequests.push({
+          id: legacyIdToUuid(`${classInfo.id}:join:${studentEmail}`),
+          class_id: classId,
+          student_id: student.id,
+          status: 'pending',
+          requested_at: request.requestedAt || new Date().toISOString(),
+          reviewed_at: null,
+          reviewed_by: null
+        });
+      }
 
       for (const [studentEmail, studentGrades] of Object.entries(classInfo.studentGrades || {})) {
         const student = usersByEmail.get(String(studentEmail).toLowerCase());
@@ -176,7 +192,8 @@ async function migrate() {
             id: legacyIdToUuid(`${classInfo.id}:grade:${studentEmail}:${fieldName}`),
             classwork_id: workId,
             student_id: student.id,
-            score: score === '' || score === null || score === undefined || !Number.isFinite(Number(score)) ? null : Number(score)
+            score: score === '' || score === null || score === undefined || !Number.isFinite(Number(score)) ? null : Number(score),
+            updated_at: new Date().toISOString()
           });
         }
       }
@@ -214,6 +231,7 @@ async function migrate() {
   }
 
   const classMemberRows = uniqueRows(classMembers, (row) => `${row.class_id}:${row.user_id}`);
+  const classJoinRequestRows = uniqueRows(classJoinRequests, (row) => row.id);
   const membershipRows = uniqueRows(memberships, (row) => `${row.user_id}:${row.school_id}`);
   const migrationCounts = {
     schools: schools.length,
@@ -223,6 +241,7 @@ async function migrate() {
     memberships: membershipRows.length,
     classes: classes.size,
     classMembers: classMemberRows.length,
+    classJoinRequests: classJoinRequestRows.length,
     classwork: classwork.length,
     grades: grades.length,
     files: storedFiles.length,
@@ -245,11 +264,20 @@ async function migrate() {
   if (classMemberRows.length) {
     failIfError(await supabase.from('class_members').upsert(classMemberRows, { onConflict: 'class_id,user_id' }), 'Writing class members');
   }
+  if (classJoinRequestRows.length) {
+    failIfError(await supabase.from('class_join_requests').upsert(
+      classJoinRequestRows,
+      { onConflict: 'id', ignoreDuplicates: true }
+    ), 'Writing class join requests');
+  }
   if (classwork.length) {
     failIfError(await supabase.from('classwork').upsert(classwork, { onConflict: 'id' }), 'Writing classwork');
   }
   if (grades.length) {
-    failIfError(await supabase.from('grades').upsert(grades, { onConflict: 'id' }), 'Writing grades');
+    failIfError(await supabase.from('grades').upsert(
+      grades,
+      { onConflict: 'id', ignoreDuplicates: true }
+    ), 'Writing grades');
   }
   if (storedFiles.length) {
     failIfError(await supabase.from('files').upsert(storedFiles, { onConflict: 'id' }), 'Writing files');
