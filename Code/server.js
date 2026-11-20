@@ -837,7 +837,7 @@ function handleRequest(req, res) {
                 });
                 if (classError) throw classError;
                 const { error: memberError } = await supabaseClient.from("class_members").upsert(
-                    { class_id: classId, user_id: user.id, role: "Teacher" },
+                    { class_id: classId, user_id: user.id, role: "teacher" },
                     { onConflict: "class_id,user_id" }
                 );
                 if (memberError) {
@@ -938,7 +938,7 @@ function handleRequest(req, res) {
 
                 if (action === "accept") {
                     const { error: memberError } = await supabaseClient.from("class_members").upsert(
-                        { class_id: classId, user_id: joinRequest.student_id, role: "Student" },
+                        { class_id: classId, user_id: joinRequest.student_id, role: "student" },
                         { onConflict: "class_id,user_id" }
                     );
                     if (memberError) {

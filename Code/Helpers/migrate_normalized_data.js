@@ -62,13 +62,27 @@ function uniqueRows(rows, keyOf) {
   return [...new Map(rows.map((row) => [keyOf(row), row])).values()];
 }
 
-function resolveClassSchoolId(classInfo, fallbackSchoolId) {
+function resolveClassSchoolId(classInfo, fallbackSchoolId, usersByEmail) {
   const directValue = classInfo && (classInfo.school_id || classInfo.schoolId || classInfo.schoolID || classInfo.school);
   if (directValue) return String(directValue);
-  return fallbackSchoolId ? String(fallbackSchoolId) : null;
+  if (fallbackSchoolId) return String(fallbackSchoolId);
+
+  const studentEmails = asArray(classInfo && classInfo.students);
+  const studentSchoolIds = studentEmails.map((email) =>
+    usersByEmail.get(String(email).toLowerCase())?.school_id
+  );
+  if (
+    studentSchoolIds.length
+    && studentSchoolIds.every(Boolean)
+    && new Set(studentSchoolIds.map(String)).size === 1
+  ) {
+    return String(studentSchoolIds[0]);
+  }
+  return null;
 }
 
 async function migrate() {
+  const classesOnly = process.argv.includes('--classes-only');
   await verifySchema();
   const users = failIfError(await supabase.from('users').select('id,auth_user_id,email,name,status,school_id,enrolledClasses,taughtClasses'), 'Reading users');
   const schools = failIfError(await supabase.from('schools').select('id,config_json'), 'Reading schools');
@@ -139,7 +153,7 @@ async function migrate() {
 
     for (const classInfo of asArray(user.taughtClasses)) {
       if (!classInfo.id) continue;
-      const resolvedSchoolId = resolveClassSchoolId(classInfo, user.school_id);
+      const resolvedSchoolId = resolveClassSchoolId(classInfo, user.school_id, usersByEmail);
       if (!resolvedSchoolId) {
         console.warn(`Skipping class ${classInfo.id} for ${user.email || user.id}: no school_id available.`);
         continue;
@@ -154,10 +168,10 @@ async function migrate() {
         created_by: user.id,
         created_at: classInfo.createdAt || new Date().toISOString()
       });
-      classMembers.push({ class_id: classId, user_id: user.id, role: 'Teacher' });
+      classMembers.push({ class_id: classId, user_id: user.id, role: 'teacher' });
       for (const studentEmail of asArray(classInfo.students)) {
         const student = usersByEmail.get(String(studentEmail).toLowerCase());
-        if (student) classMembers.push({ class_id: classId, user_id: student.id, role: 'Student' });
+        if (student) classMembers.push({ class_id: classId, user_id: student.id, role: 'student' });
       }
       for (const request of asArray(classInfo.pendingRequests)) {
         const studentEmail = String(request.studentEmail || '').trim().toLowerCase();
@@ -209,7 +223,7 @@ async function migrate() {
       classMembers.push({
         class_id: legacyIdToUuid(enrollment.legacyClassId),
         user_id: enrollment.userId,
-        role: 'Student'
+        role: 'student'
       });
     }
   }
@@ -249,14 +263,16 @@ async function migrate() {
   };
 
   if (process.argv.includes('--dry-run')) {
-    console.log(JSON.stringify({ dryRun: true, schemaVerified: true, ...migrationCounts }, null, 2));
+    console.log(JSON.stringify({ dryRun: true, classesOnly, schemaVerified: true, ...migrationCounts }, null, 2));
     return;
   }
 
-  if (settings.length) failIfError(await supabase.from('school_settings').upsert(settings, { onConflict: 'school_id' }), 'Writing school settings');
-  if (themes.length) failIfError(await supabase.from('school_themes').upsert(themes, { onConflict: 'school_id' }), 'Writing school themes');
-  if (membershipRows.length) {
-    failIfError(await supabase.from('school_memberships').upsert(membershipRows, { onConflict: 'user_id,school_id' }), 'Writing memberships');
+  if (!classesOnly) {
+    if (settings.length) failIfError(await supabase.from('school_settings').upsert(settings, { onConflict: 'school_id' }), 'Writing school settings');
+    if (themes.length) failIfError(await supabase.from('school_themes').upsert(themes, { onConflict: 'school_id' }), 'Writing school themes');
+    if (membershipRows.length) {
+      failIfError(await supabase.from('school_memberships').upsert(membershipRows, { onConflict: 'user_id,school_id' }), 'Writing memberships');
+    }
   }
   if (classes.size) {
     failIfError(await supabase.from('classes').upsert([...classes.values()], { onConflict: 'id' }), 'Writing classes');
@@ -279,30 +295,33 @@ async function migrate() {
       { onConflict: 'id', ignoreDuplicates: true }
     ), 'Writing grades');
   }
-  if (storedFiles.length) {
-    failIfError(await supabase.from('files').upsert(storedFiles, { onConflict: 'id' }), 'Writing files');
-  }
-  const vicTheme = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'vic-theme.json'), 'utf8'));
-  failIfError(await supabase.from('global_settings').upsert({ key: 'vic_theme', value: vicTheme }, { onConflict: 'key' }), 'Writing global settings');
+  if (!classesOnly) {
+    if (storedFiles.length) {
+      failIfError(await supabase.from('files').upsert(storedFiles, { onConflict: 'id' }), 'Writing files');
+    }
+    const vicTheme = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'vic-theme.json'), 'utf8'));
+    failIfError(await supabase.from('global_settings').upsert({ key: 'vic_theme', value: vicTheme }, { onConflict: 'key' }), 'Writing global settings');
 
-  if (joinRequests.length) {
-    for (const request of joinRequests) {
-      const { data: existing, error: existingError } = await supabase
-        .from('school_join_requests')
-        .select('user_id')
-        .eq('user_id', request.user_id)
-        .eq('school_id', request.school_id)
-        .eq('status', request.status)
-        .limit(1)
-        .maybeSingle();
-      if (existingError) throw new Error(`Checking join request: ${existingError.message}`);
-      if (!existing) {
-        failIfError(await supabase.from('school_join_requests').insert(request), 'Writing join request');
+    if (joinRequests.length) {
+      for (const request of joinRequests) {
+        const { data: existing, error: existingError } = await supabase
+          .from('school_join_requests')
+          .select('user_id')
+          .eq('user_id', request.user_id)
+          .eq('school_id', request.school_id)
+          .eq('status', request.status)
+          .limit(1)
+          .maybeSingle();
+        if (existingError) throw new Error(`Checking join request: ${existingError.message}`);
+        if (!existing) {
+          failIfError(await supabase.from('school_join_requests').insert(request), 'Writing join request');
+        }
       }
     }
   }
 
   console.log(JSON.stringify({
+    classesOnly,
     ...migrationCounts,
     dryRun: false
   }, null, 2));
