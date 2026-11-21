@@ -2,7 +2,8 @@
 -- DO NOT run this file as a table-creation migration.
 -- The normalized tables already exist and use UUID foreign keys.
 -- Run Code/Database/class_join_requests.sql first if that table is not present,
--- then run Code/Helpers/migrate_normalized_data.js to populate the tables.
+-- run Code/Database/backup_and_drop_legacy_class_columns.sql to preserve and
+-- remove legacy class fields, then run Code/Helpers/migrate_normalized_data.js.
 
 -- Expected normalized tables and key columns:
 -- school_settings: school_id, location, grade_fields, api_endpoint
@@ -21,6 +22,7 @@
 -- global_settings: key, value, updated_at
 
 -- The migration reads legacy data from:
--- users.school_id, users.enrolledClasses, users.taughtClasses
+-- users.school_id, users_legacy_class_backup.enrolled_classes,
+-- users_legacy_class_backup.taught_classes
 -- schools.config_json
 -- and maps legacy email/text relationships to UUID relationships.

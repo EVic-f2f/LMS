@@ -39,7 +39,8 @@ async function verifyColumns(table, columns) {
 
 async function verifySchema() {
   const contracts = {
-    users: ['id', 'auth_user_id', 'email', 'name', 'status', 'school_id', 'enrolledClasses', 'taughtClasses'],
+    users: ['id', 'auth_user_id', 'email', 'name', 'status', 'school_id'],
+    users_legacy_class_backup: ['user_id', 'email', 'enrolled_classes', 'taught_classes'],
     schools: ['id', 'config_json'],
     school_settings: ['school_id', 'location', 'grade_fields', 'api_endpoint'],
     school_themes: ['school_id', 'primary_color', 'secondary_color', 'accent_color', 'success_color', 'warning_color', 'background_color', 'text_color'],
@@ -84,11 +85,25 @@ function resolveClassSchoolId(classInfo, fallbackSchoolId, usersByEmail) {
 async function migrate() {
   const classesOnly = process.argv.includes('--classes-only');
   await verifySchema();
-  const users = failIfError(await supabase.from('users').select('id,auth_user_id,email,name,status,school_id,enrolledClasses,taughtClasses'), 'Reading users');
+  const users = failIfError(await supabase.from('users').select('id,auth_user_id,email,name,status,school_id'), 'Reading users');
+  const legacyClassRows = failIfError(
+    await supabase.from('users_legacy_class_backup').select('user_id,email,enrolled_classes,taught_classes'),
+    'Reading backed-up legacy class data'
+  );
+  const legacyClassesByUserId = new Map(legacyClassRows.map((row) => [String(row.user_id), row]));
+  const usersWithLegacyClasses = users.map((user) => {
+    const backup = legacyClassesByUserId.get(String(user.id))
+      || legacyClassRows.find((row) => String(row.email || '').toLowerCase() === String(user.email || '').toLowerCase());
+    return {
+      ...user,
+      enrolledClasses: asArray(backup?.enrolled_classes),
+      taughtClasses: asArray(backup?.taught_classes)
+    };
+  });
   const schools = failIfError(await supabase.from('schools').select('id,config_json'), 'Reading schools');
 
   const schoolsById = new Map(schools.map((school) => [String(school.id), school]));
-  const usersByEmail = new Map(users.map((user) => [String(user.email).toLowerCase(), user]));
+  const usersByEmail = new Map(usersWithLegacyClasses.map((user) => [String(user.email).toLowerCase(), user]));
   const memberships = [];
   const classes = new Map();
   const classMembers = [];
@@ -138,7 +153,7 @@ async function migrate() {
     }
   }
 
-  for (const user of users) {
+  for (const user of usersWithLegacyClasses) {
     const membershipRole = getSchoolMembershipRole(user.status);
     if (user.school_id && membershipRole) {
       memberships.push({
