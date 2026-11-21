@@ -54,29 +54,13 @@ function getVicTheme() {
     return JSON.parse(fs.readFileSync(vicThemePath, "utf8"));
 }
 
-async function requireAdministrator(email) {
-    const normalizedEmail = String(email || "").trim().toLowerCase();
-    if (!normalizedEmail) throw new Error("Missing administrator email");
-
-    const { data, error } = await supabase
-        .from("users")
-        .select("email, status")
-        .ilike("email", normalizedEmail)
-        .maybeSingle();
-
-    if (error) throw error;
-    if (!data || !["Administrator", "Admin"].includes(String(data.status))) {
-        const error = new Error("Administrator access required");
-        error.statusCode = 403;
-        throw error;
+async function requireAdministrator(req) {
+    const user = await getAuthenticatedUser(req);
+    if (!["Administrator", "Admin"].includes(String(user.status))) {
+        throw httpError("Administrator access required.", 403);
     }
-    return data;
+    return user;
 }
-
-
-
-
-
 
 async function initializeDatabase() {
     // Only ensure local folders exist. Users are stored in Supabase now.
@@ -104,69 +88,40 @@ async function getAllRows(table, columns, orderColumns) {
     return getPagedRows(() => supabase.from(table).select(columns), orderColumns);
 }
 
-async function getUserData() {
-    // Service role bypasses RLS; requires SUPABASE_SERVICE_ROLE_KEY.
-    requireSupabase();
-    const rows = await getAllRows(
-        "users",
-        "id, email, name, status, preferences, passwordHash, school_id, createdAt, lastSignedIn",
-        ["id"]
-    );
-    return rows.map((row) => ({
-        id: row.id,
-        email: row.email,
-        name: row.name,
-        status: row.status,
-        preferences: row.preferences || {},
-        passwordHash: row.passwordHash,
-        school_id: row.school_id || null,
-        createdAt: row.createdAt,
-        lastSignedIn: row.lastSignedIn
-    }));
-}
-
-
-async function saveUserData(updatedUsers) {
-    const existingRows = await getAllRows(
-        "users",
-        "email, name, status, preferences, passwordHash, school_id, createdAt, lastSignedIn",
-        ["email"]
-    );
-    const existingByEmail = new Map(existingRows.map((row) => [String(row.email).toLowerCase(), row]));
-
-    for (const user of updatedUsers) {
-        const passwordHash = String(user.passwordHash || "").trim();
-        const record = {
-            email: String(user.email || ""),
-            name: String(user.name || ""),
-            status: String(user.status || ""),
-            preferences: user.preferences || {},
-            school_id: user.school_id || null,
-            createdAt: String(user.createdAt || ""),
-            lastSignedIn: String(user.lastSignedIn || "")
-        };
-        if (passwordHash) record.passwordHash = passwordHash;
-
-        const existing = existingByEmail.get(record.email.toLowerCase());
-        if (!existing) {
-            const { error } = await supabase.from("users").insert({
-                ...record,
-                // Keep legacy columns empty for schema compatibility; class data lives in normalized tables.
-                enrolledClasses: [],
-                taughtClasses: []
-            });
-            if (error) throw error;
-            continue;
-        }
-
-        const changed = Object.entries(record).some(([key, value]) => !isDeepStrictEqual(existing[key], value));
-        if (!changed) continue;
-
-        const { error } = await supabase.from("users").update(record).eq("email", existing.email);
-        if (error) throw error;
+async function getAdminUserData(req) {
+    const user = await getAuthenticatedUser(req);
+    const columns = "id, email, name, status, school_id, createdAt, lastSignedIn";
+    if (["Administrator", "Admin"].includes(String(user.status))) {
+        return getAllRows("users", columns, ["id"]);
+    }
+    if (String(user.status) !== "School Administrator") {
+        throw httpError("Administrator access required.", 403);
     }
 
-    return updatedUsers;
+    const schoolId = await getAuthorizedSchoolId(req, user, req.headers["x-school-id"]);
+    const [memberships, schoolUsers] = await Promise.all([
+        getPagedRows(
+            () => requireSupabase().from("school_memberships")
+                .select("user_id")
+                .eq("school_id", schoolId)
+                .eq("status", "active"),
+            ["user_id"]
+        ),
+        getPagedRows(
+            () => requireSupabase().from("users").select("id").eq("school_id", schoolId),
+            ["id"]
+        )
+    ]);
+    const userIds = [...new Set([
+        ...memberships.map((membership) => String(membership.user_id)),
+        ...schoolUsers.map((schoolUser) => String(schoolUser.id))
+    ])];
+    if (!userIds.length) return [];
+
+    return getPagedRows(
+        () => requireSupabase().from("users").select(columns).in("id", userIds),
+        ["id"]
+    );
 }
 
 function httpError(message, statusCode) {
@@ -183,7 +138,7 @@ async function getAuthenticatedUser(req) {
     const email = getSessionEmail(req);
     const { data: user, error } = await requireSupabase()
         .from("users")
-        .select("id, email, name, status, school_id")
+        .select("id, email, name, status, school_id, preferences, createdAt, lastSignedIn")
         .ilike("email", email)
         .maybeSingle();
     if (error) throw error;
@@ -207,17 +162,15 @@ async function getAuthorizedSchoolId(req, user, requestedSchoolId) {
     }
     if (!schoolId) throw httpError("Join a school before using classes.", 403);
 
-    if (String(user.school_id || "") !== schoolId) {
-        const { data: membership, error } = await requireSupabase()
-            .from("school_memberships")
-            .select("school_id")
-            .eq("user_id", user.id)
-            .eq("school_id", schoolId)
-            .eq("status", "active")
-            .maybeSingle();
-        if (error) throw error;
-        if (!membership) throw httpError("You do not have access to this school.", 403);
-    }
+    const { data: membership, error } = await requireSupabase()
+        .from("school_memberships")
+        .select("school_id")
+        .eq("user_id", user.id)
+        .eq("school_id", schoolId)
+        .eq("status", "active")
+        .maybeSingle();
+    if (error) throw error;
+    if (!membership) throw httpError("You do not have access to this school.", 403);
     return schoolId;
 }
 
@@ -699,6 +652,73 @@ function handleRequest(req, res) {
 
 
 
+    if (url.pathname === "/api/auth/register") {
+        setCorsHeaders(res);
+        if (req.method === "OPTIONS") {
+            res.writeHead(204);
+            res.end();
+            return;
+        }
+        if (req.method !== "POST") {
+            sendJson(res, 405, { error: "Method not allowed" });
+            return;
+        }
+
+        (async () => {
+            const body = await readJsonBody(req);
+            const email = String(body.email || "").trim().toLowerCase();
+            const name = String(body.name || "").trim();
+            const password = String(body.password || "");
+            if (!email || !email.includes("@") || !name || !password) {
+                throw httpError("A valid email, name, and password are required.", 400);
+            }
+
+            const supabaseClient = requireSupabase();
+            const { data: existingUser, error: existingError } = await supabaseClient
+                .from("users")
+                .select("id")
+                .ilike("email", email)
+                .maybeSingle();
+            if (existingError) throw existingError;
+            if (existingUser) throw httpError("An account with that email already exists.", 409);
+
+            const requestedStatus = String(body.status || "Student");
+            const status = ["Student", "Guest"].includes(requestedStatus) ? requestedStatus : "Student";
+            const preferences = {
+                autoLogin: Boolean(body.preferences?.autoLogin),
+                notifications: Boolean(body.preferences?.notifications)
+            };
+            const now = new Date().toISOString();
+            const { data: user, error: insertError } = await supabaseClient
+                .from("users")
+                .insert({
+                    email,
+                    name,
+                    status,
+                    preferences,
+                    passwordHash: hashPassword(password),
+                    school_id: null,
+                    createdAt: now,
+                    lastSignedIn: now
+                })
+                .select("id, email, name, status, preferences, school_id, createdAt, lastSignedIn")
+                .single();
+            if (insertError) {
+                if (insertError.code === "23505") throw httpError("An account with that email already exists.", 409);
+                throw insertError;
+            }
+            sendJson(res, 201, {
+                success: true,
+                user: sanitizeUserForClient(user),
+                token: createSessionToken(user.email)
+            });
+        })().catch((error) => {
+            console.error("User registration failed:", error);
+            sendJson(res, error.statusCode || 500, { success: false, error: error.message });
+        });
+        return;
+    }
+
     if (url.pathname === "/api/auth/login") {
         setCorsHeaders(res);
         if (req.method === "OPTIONS") {
@@ -707,49 +727,44 @@ function handleRequest(req, res) {
             return;
         }
 
-        if (req.method === "POST") {
-            let body = "";
-            req.on("data", (chunk) => {
-                body += chunk.toString();
-            });
-            req.on("end", async () => {
-                try {
-                    const { email, password } = JSON.parse(body);
-                    if (!email || !password) {
-                        sendJson(res, 400, { success: false, error: "Email and password are required." });
-                        return;
-                    }
-
-                    const normalizedEmail = String(email).trim().toLowerCase();
-                    const users = await getUserData();
-                    const user = users.find((item) => String(item.email).toLowerCase() === normalizedEmail);
-                    if (!user) {
-                        sendJson(res, 401, { success: false, error: "Invalid email or password." });
-                        return;
-                    }
-
-                    const passwordHash = hashPassword(password);
-                    if (passwordHash !== user.passwordHash) {
-                        sendJson(res, 401, { success: false, error: "Invalid email or password." });
-                        return;
-                    }
-
-                    const now = new Date().toISOString();
-                    user.lastSignedIn = now;
-                    await saveUserData(users);
-                    sendJson(res, 200, {
-                        success: true,
-                        user: sanitizeUserForClient(user),
-                        token: createSessionToken(user.email)
-                    });
-                } catch (err) {
-                    sendJson(res, 400, { success: false, error: err.message });
-                }
-            });
+        if (req.method !== "POST") {
+            sendJson(res, 405, { error: "Method not allowed" });
             return;
         }
 
-        sendJson(res, 405, { error: "Method not allowed" });
+        (async () => {
+            const body = await readJsonBody(req);
+            const email = String(body.email || "").trim().toLowerCase();
+            const password = String(body.password || "");
+            if (!email || !password) throw httpError("Email and password are required.", 400);
+
+            const { data: user, error } = await requireSupabase()
+                .from("users")
+                .select("id, email, name, status, preferences, passwordHash, school_id, createdAt, lastSignedIn")
+                .ilike("email", email)
+                .maybeSingle();
+            if (error) throw error;
+            if (!user || hashPassword(password) !== user.passwordHash) {
+                throw httpError("Invalid email or password.", 401);
+            }
+
+            const lastSignedIn = new Date().toISOString();
+            const { error: updateError } = await requireSupabase()
+                .from("users")
+                .update({ lastSignedIn })
+                .eq("id", user.id);
+            if (updateError) throw updateError;
+
+            user.lastSignedIn = lastSignedIn;
+            sendJson(res, 200, {
+                success: true,
+                user: sanitizeUserForClient(user),
+                token: createSessionToken(user.email)
+            });
+        })().catch((error) => {
+            console.error("User login failed:", error);
+            sendJson(res, error.statusCode || 500, { success: false, error: error.message });
+        });
         return;
     }
 
@@ -762,34 +777,29 @@ function handleRequest(req, res) {
         }
 
         if (req.method === "GET") {
-            getUserData()
-                .then((data) => sendJson(res, 200, data.map(sanitizeUserForClient)))
-                .catch((err) => sendJson(res, 500, { success: false, error: err.message }));
+            getAuthenticatedUser(req)
+                .then((user) => sendJson(res, 200, [sanitizeUserForClient(user)]))
+                .catch((error) => sendJson(res, error.statusCode || 500, { success: false, error: error.message }));
             return;
         }
-
-        if (req.method === "POST") {
-            let body = "";
-            req.on("data", (chunk) => {
-                body += chunk.toString();
-            });
-            req.on("end", () => {
-                try {
-                    const updatedUsers = JSON.parse(body);
-                    if (!Array.isArray(updatedUsers)) {
-                        throw new Error("Expected an array of users");
-                    }
-                    saveUserData(updatedUsers)
-                        .then(() => sendJson(res, 200, { success: true }))
-                        .catch((err) => sendJson(res, 500, { success: false, error: err.message }));
-                } catch (err) {
-                    sendJson(res, 400, { success: false, error: err.message });
-                }
-            });
-            return;
-        }
-
         sendJson(res, 405, { error: "Method not allowed" });
+        return;
+    }
+
+    if (url.pathname === "/api/admin/users") {
+        setCorsHeaders(res);
+        if (req.method === "OPTIONS") {
+            res.writeHead(204);
+            res.end();
+            return;
+        }
+        if (req.method !== "GET") {
+            sendJson(res, 405, { error: "Method not allowed" });
+            return;
+        }
+        getAdminUserData(req)
+            .then((users) => sendJson(res, 200, users.map(sanitizeUserForClient)))
+            .catch((error) => sendJson(res, error.statusCode || 500, { success: false, error: error.message }));
         return;
     }
 
@@ -1108,7 +1118,7 @@ function handleRequest(req, res) {
             try {
                 sendJson(res, 200, getVicTheme());
             } catch (err) {
-                sendJson(res, 500, { success: false, error: err.message });
+                sendJson(res, err.statusCode || 500, { success: false, error: err.message });
             }
             return;
         }
@@ -1123,29 +1133,25 @@ function handleRequest(req, res) {
             res.end();
             return;
         }
-        if (req.method === "POST") {
-            let body = "";
-            req.on("data", (chunk) => { body += chunk.toString(); });
-            req.on("end", async () => {
-                try {
-                    const payload = JSON.parse(body || "{}");
-                    await requireAdministrator(payload.adminEmail);
-                    const allowedKeys = ["primary", "secondary", "accent", "background", "surface", "text"];
-                    const theme = {};
-                    allowedKeys.forEach((key) => {
-                        if (typeof payload.theme?.[key] === "string" && payload.theme[key].trim()) {
-                            theme[key] = payload.theme[key].trim();
-                        }
-                    });
-                    fs.writeFileSync(vicThemePath, JSON.stringify(theme, null, 2));
-                    sendJson(res, 200, { success: true, theme });
-                } catch (err) {
-                    sendJson(res, err.statusCode || 500, { success: false, error: err.message });
-                }
-            });
+        if (req.method !== "POST") {
+            sendJson(res, 405, { error: "Method not allowed" });
             return;
         }
-        sendJson(res, 405, { error: "Method not allowed" });
+        (async () => {
+            await requireAdministrator(req);
+            const payload = await readJsonBody(req);
+            const allowedKeys = ["primary", "secondary", "accent", "background", "surface", "text"];
+            const theme = {};
+            allowedKeys.forEach((key) => {
+                if (typeof payload.theme?.[key] === "string" && payload.theme[key].trim()) {
+                    theme[key] = payload.theme[key].trim();
+                }
+            });
+            fs.writeFileSync(vicThemePath, JSON.stringify(theme, null, 2));
+            sendJson(res, 200, { success: true, theme });
+        })().catch((error) => {
+            sendJson(res, error.statusCode || 500, { success: false, error: error.message });
+        });
         return;
     }
 
@@ -1162,61 +1168,12 @@ function handleRequest(req, res) {
 
         if (req.method === "GET") {
             (async () => {
-                const email = url.searchParams.get("email");
-                if (!email) {
-                    sendJson(res, 400, { success: false, error: "Missing email query param" });
-                    return;
-                }
-
                 try {
-                    const normalizedEmail = String(email).trim().toLowerCase();
-
-                    // Resolve the requested membership, preserving legacy school_id support.
                     requireSupabase();
-                    const { data: userRows, error: userErr } = await supabase
-                        .from("users")
-                        .select("id, school_id, status")
-                        .ilike("email", normalizedEmail)
-                        .maybeSingle();
-
-                    if (userErr) throw userErr;
-                    if (!userRows) {
-                        sendJson(res, 404, { success: false, error: "User not found" });
-                        return;
-                    }
-
                     const requestedSchoolId = url.searchParams.get("schoolId");
-                    let schoolId = requestedSchoolId || userRows.school_id;
-                    if (requestedSchoolId && String(requestedSchoolId) !== String(userRows.school_id)) {
-                        const { data: membership, error: membershipError } = await supabase
-                            .from("school_memberships")
-                            .select("school_id, status")
-                            .eq("user_id", userRows.id)
-                            .eq("school_id", requestedSchoolId)
-                            .maybeSingle();
-                        if (membershipError) throw membershipError;
-                        if (!membership || membership.status !== "active") {
-                            sendJson(res, 403, { success: false, error: "You do not belong to this school" });
-                            return;
-                        }
-                        schoolId = membership.school_id;
-                    } else if (!schoolId) {
-                        const { data: membership, error: membershipError } = await supabase
-                            .from("school_memberships")
-                            .select("school_id")
-                            .eq("user_id", userRows.id)
-                            .eq("status", "active")
-                            .limit(1)
-                            .maybeSingle();
-                        if (membershipError) throw membershipError;
-                        schoolId = membership?.school_id;
-                    }
-                    if (!schoolId) {
-                        sendJson(res, 404, { success: false, error: "User has no school membership" });
-                        return;
-                    }
+                    const user = await getAuthenticatedUser(req);
+                    const schoolId = await getAuthorizedSchoolId(req, user, requestedSchoolId);
 
-                    // 2) Fetch school config
                     const { data: schoolRow, error: schoolErr } = await supabase
                         .from("schools")
                         .select("id, name, logo_url, config_json")
@@ -1240,7 +1197,7 @@ function handleRequest(req, res) {
                     });
                     return;
                 } catch (err) {
-                    sendJson(res, 500, { success: false, error: err.message });
+                    sendJson(res, err.statusCode || 500, { success: false, error: err.message });
                     return;
                 }
             })();
@@ -1262,21 +1219,7 @@ function handleRequest(req, res) {
             (async () => {
                 try {
                     requireSupabase();
-                    const email = String(url.searchParams.get("email") || "").trim().toLowerCase();
-                    if (!email) {
-                        sendJson(res, 400, { success: false, error: "Missing email query param" });
-                        return;
-                    }
-                    const { data: user, error: userError } = await supabase
-                        .from("users")
-                        .select("id, school_id")
-                        .ilike("email", email)
-                        .maybeSingle();
-                    if (userError) throw userError;
-                    if (!user) {
-                        sendJson(res, 404, { success: false, error: "User not found" });
-                        return;
-                    }
+                    const user = await getAuthenticatedUser(req);
 
                     const schoolIds = new Set();
                     if (user.school_id) schoolIds.add(String(user.school_id));
@@ -1300,7 +1243,7 @@ function handleRequest(req, res) {
                     if (schoolsError) throw schoolsError;
                     sendJson(res, 200, { success: true, schools: schools || [] });
                 } catch (err) {
-                    sendJson(res, 500, { success: false, error: err.message });
+                    sendJson(res, err.statusCode || 500, { success: false, error: err.message });
                 }
             })();
             return;
@@ -1347,32 +1290,27 @@ function handleRequest(req, res) {
                 try {
                     requireSupabase();
                     const payload = JSON.parse(body || "{}");
-                    const email = String(payload.email || "").trim().toLowerCase();
                     const schoolId = String(payload.schoolId || "").trim();
-                    if (!email || !schoolId) {
-                        sendJson(res, 400, { success: false, error: "Email and schoolId are required" });
+                    if (!schoolId) {
+                        sendJson(res, 400, { success: false, error: "SchoolId is required" });
                         return;
                     }
 
-                    const { data: user, error: userError } = await supabase.from("users").select("id, email, name, status, school_id").ilike("email", email).maybeSingle();
-                    if (userError) throw userError;
-                    if (!user) {
-                        sendJson(res, 404, { success: false, error: "User not found. Sign in first." });
-                        return;
-                    }
+                    const user = await getAuthenticatedUser(req);
+                    const email = String(user.email).trim().toLowerCase();
                     const membershipRole = getSchoolMembershipRole(user.status);
                     if (!membershipRole) {
                         sendJson(res, 400, { success: false, error: "Guest accounts cannot join a school" });
                         return;
                     }
-                    const isAdmin = ["Administrator", "Admin", "School Administrator"].includes(String(user.status));
+                    const isGlobalAdministrator = ["Administrator", "Admin"].includes(String(user.status));
                     const { data: activeMemberships, error: membershipsError } = await supabase
                         .from("school_memberships")
                         .select("school_id")
                         .eq("user_id", user.id)
                         .eq("status", "active");
                     if (membershipsError) throw membershipsError;
-                    if ((user.school_id || activeMemberships?.length) && !isAdmin) {
+                    if ((user.school_id || activeMemberships?.length) && !isGlobalAdministrator) {
                         sendJson(res, 400, { success: false, error: "You already belong to a school" });
                         return;
                     }
@@ -1384,7 +1322,7 @@ function handleRequest(req, res) {
                         return;
                     }
 
-                    if (isAdmin) {
+                    if (isGlobalAdministrator) {
                         const { error: membershipError } = await supabase
                             .from("school_memberships")
                             .upsert({
@@ -1430,7 +1368,7 @@ function handleRequest(req, res) {
                     if (insertRequestError) throw insertRequestError;
                     sendJson(res, 200, { success: true });
                 } catch (err) {
-                    sendJson(res, 500, { success: false, error: err.message });
+                    sendJson(res, err.statusCode || 500, { success: false, error: err.message });
                 }
             });
             return;
@@ -1453,54 +1391,35 @@ function handleRequest(req, res) {
 
         const handleRequests = async (payload) => {
             requireSupabase();
-            const approverEmail = String(payload.email || "").trim().toLowerCase();
-            const { data: approver, error: approverError } = await supabase.from("users").select("id, email, status, school_id").ilike("email", approverEmail).maybeSingle();
-            if (approverError) throw approverError;
-            if (!approver || !["School Administrator", "Administrator", "Admin"].includes(String(approver.status))) {
-                const error = new Error("School Administrator access required");
-                error.statusCode = 403;
-                throw error;
+            const approver = await getAuthenticatedUser(req);
+            const isGlobalAdministrator = ["Administrator", "Admin"].includes(String(approver.status));
+            const isSchoolAdministrator = String(approver.status) === "School Administrator";
+            if (!isGlobalAdministrator && !isSchoolAdministrator) {
+                throw httpError("School Administrator access required.", 403);
             }
-
             const requestedSchoolId = String(payload.schoolId || "").trim();
             let schoolId = requestedSchoolId || approver.school_id;
-            if (requestedSchoolId && String(requestedSchoolId) !== String(approver.school_id)) {
+            if (isSchoolAdministrator) {
+                schoolId = await getAuthorizedSchoolId(req, approver, schoolId);
                 const { data: membership, error: membershipError } = await supabase
                     .from("school_memberships")
                     .select("school_id, role, status")
                     .eq("user_id", approver.id)
-                    .eq("school_id", requestedSchoolId)
+                    .eq("school_id", schoolId)
                     .eq("status", "active")
                     .maybeSingle();
                 if (membershipError) throw membershipError;
-                if (!membership || !["school_admin", "administrator"].includes(String(membership.role))) {
-                    const error = new Error("School Administrator access required for this school");
-                    error.statusCode = 403;
-                    throw error;
+                if (String(approver.school_id || "") !== schoolId
+                    && (!membership || !["school_admin", "administrator"].includes(String(membership.role)))) {
+                    throw httpError("School Administrator access required for this school.", 403);
                 }
-                schoolId = membership.school_id;
-            }
-            if (!schoolId) {
-                const { data: membership, error: membershipError } = await supabase
-                    .from("school_memberships")
-                    .select("school_id")
-                    .eq("user_id", approver.id)
-                    .eq("status", "active")
-                    .in("role", ["school_admin", "administrator"])
-                    .limit(1)
-                    .maybeSingle();
-                if (membershipError) throw membershipError;
-                schoolId = membership?.school_id;
-            }
-            if (!schoolId) {
-                const error = new Error("No administered school is selected");
-                error.statusCode = 400;
-                throw error;
+            } else if (!schoolId) {
+                throw httpError("Select a school to manage.", 400);
             }
 
             const { data: school, error: schoolError } = await supabase.from("schools").select("id, config_json").eq("id", schoolId).maybeSingle();
             if (schoolError) throw schoolError;
-            if (!school) throw new Error("School not found");
+            if (!school) throw httpError("School not found.", 404);
             const config = school.config_json || {};
             const legacyRequests = Array.isArray(config.joinRequests) ? config.joinRequests : [];
             const { data: normalizedRows, error: normalizedError } = await supabase
@@ -1559,8 +1478,8 @@ function handleRequest(req, res) {
                     if (!requester) throw new Error("Requesting user not found");
                     const membershipRole = getSchoolMembershipRole(requester.status);
                     if (!membershipRole) throw new Error("Guest accounts cannot join a school");
-                    const requesterIsAdmin = ["Administrator", "Admin", "School Administrator"].includes(String(requester.status));
-                    if (!requesterIsAdmin) {
+                    const requesterIsGlobalAdministrator = ["Administrator", "Admin"].includes(String(requester.status));
+                    if (!requesterIsGlobalAdministrator) {
                         const { data: existingMemberships, error: existingMembershipsError } = await supabase
                             .from("school_memberships")
                             .select("school_id")
@@ -1616,12 +1535,10 @@ function handleRequest(req, res) {
                 catch (err) { sendJson(res, err.statusCode || 500, { success: false, error: err.message }); }
             })();
         } else {
-            let body = "";
-            req.on("data", (chunk) => { body += chunk.toString(); });
-            req.on("end", async () => {
-                try { sendJson(res, 200, await handleRequests(JSON.parse(body || "{}"))); }
-                catch (err) { sendJson(res, err.statusCode || 500, { success: false, error: err.message }); }
-            });
+            readJsonBody(req)
+                .then((payload) => handleRequests(payload))
+                .then((result) => sendJson(res, 200, result))
+                .catch((error) => sendJson(res, error.statusCode || 500, { success: false, error: error.message }));
         }
         return;
     }
@@ -1634,90 +1551,54 @@ function handleRequest(req, res) {
             return;
         }
 
-        if (req.method === "POST") {
-            let body = "";
-            req.on("data", (chunk) => {
-                body += chunk.toString();
-            });
-            req.on("end", async () => {
-                try {
-                    const payload = JSON.parse(body || "{}");
-                    const email = payload.email;
-                    const schoolName = payload.schoolName;
-                    const config_json = payload.config_json || {};
-                    const logo_url = payload.logoUrl || null;
-                    const location = payload.location || null;
-
-                    if (!email || !schoolName) {
-                        sendJson(res, 400, { success: false, error: "Missing email or schoolName" });
-                        return;
-                    }
-
-                    requireSupabase();
-                    const normalizedEmail = String(email).trim().toLowerCase();
-
-                    // Ensure user exists
-                    const { data: userRow, error: userErr } = await supabase
-                        .from("users")
-                        .select("email, school_id")
-                        .ilike("email", normalizedEmail)
-                        .maybeSingle();
-
-
-                    if (userErr) throw userErr;
-                    if (!userRow) {
-                        sendJson(res, 404, { success: false, error: "User not found" });
-                        return;
-                    }
-
-                    // Create school (or reuse by name)
-                    const { data: schoolRow, error: schoolErr } = await supabase
-                        .from("schools")
-                        .select("id")
-                        .ilike("name", String(schoolName).trim())
-                        .maybeSingle();
-
-                    if (schoolErr) throw schoolErr;
-
-                    let schoolId = schoolRow?.id;
-                    if (!schoolId) {
-                        const schoolConfig = {
-                            ...config_json,
-                            ...(location ? { location } : {})
-                        };
-                        const insertPayload = {
-                            name: String(schoolName).trim(),
-                            logo_url,
-                            config_json: schoolConfig
-                        };
-
-                        const { data: created, error: createErr } = await supabase
-                            .from("schools")
-                            .insert(insertPayload)
-                            .select("id")
-                            .single();
-
-                        if (createErr) throw createErr;
-                        schoolId = created?.id;
-                    }
-
-                    // Assign school_id to user
-                    const { error: updateErr } = await supabase
-                        .from("users")
-                        .update({ school_id: schoolId })
-                        .eq("email", userRow.email);
-
-                    if (updateErr) throw updateErr;
-
-                    sendJson(res, 200, { success: true, school_id: schoolId });
-                } catch (err) {
-                    sendJson(res, 500, { success: false, error: err.message });
-                }
-            });
+        if (req.method !== "POST") {
+            sendJson(res, 405, { error: "Method not allowed" });
             return;
         }
+        readJsonBody(req)
+            .then(async (payload) => {
+                const user = await getAuthenticatedUser(req);
+                const schoolName = String(payload.schoolName || "").trim();
+                if (!schoolName) throw httpError("School name is required.", 400);
+                const membershipRole = getSchoolMembershipRole(user.status);
+                if (!membershipRole) throw httpError("Guest accounts cannot create or join a school.", 403);
+                const { data: memberships, error: membershipsError } = await supabase
+                    .from("school_memberships")
+                    .select("school_id")
+                    .eq("user_id", user.id)
+                    .eq("status", "active")
+                    .limit(1);
+                if (membershipsError) throw membershipsError;
+                if (user.school_id || memberships?.length) {
+                    throw httpError("This account already belongs to a school.", 409);
+                }
 
-        sendJson(res, 405, { error: "Method not allowed" });
+                const { data: school, error: createError } = await supabase
+                    .from("schools")
+                    .insert({ name: schoolName, config_json: {} })
+                    .select("id")
+                    .single();
+                if (createError) throw createError;
+
+                const { error: membershipError } = await supabase
+                    .from("school_memberships")
+                    .insert({
+                        user_id: user.id,
+                        school_id: school.id,
+                        role: membershipRole,
+                        status: "active"
+                    });
+                if (membershipError) throw membershipError;
+
+                const { error: updateError } = await supabase
+                    .from("users")
+                    .update({ school_id: school.id })
+                    .eq("id", user.id);
+                if (updateError) throw updateError;
+                return { success: true, school_id: school.id };
+            })
+            .then((result) => sendJson(res, 201, result))
+            .catch((error) => sendJson(res, error.statusCode || 500, { success: false, error: error.message }));
         return;
     }
 
@@ -1829,22 +1710,35 @@ function handleRequest(req, res) {
             (async () => {
                 try {
                     requireSupabase();
-                    await requireAdministrator(url.searchParams.get("adminEmail"));
+                    const admin = await getAuthenticatedUser(req);
+                    const isGlobalAdministrator = ["Administrator", "Admin"].includes(String(admin.status));
+                    const isSchoolAdministrator = String(admin.status) === "School Administrator";
+                    if (!isGlobalAdministrator && !isSchoolAdministrator) {
+                        throw httpError("Administrator access required.", 403);
+                    }
                     const query = String(url.searchParams.get("q") || "").trim().toLowerCase();
-
-                    const [{ data: users, error: usersError }, { data: schools, error: schoolsError }] = await Promise.all([
-                        supabase.from("users").select("email, name, status, school_id, lastSignedIn"),
-                        supabase.from("schools").select("id, name, logo_url, config_json")
+                    const schoolId = isSchoolAdministrator
+                        ? await getAuthorizedSchoolId(req, admin, url.searchParams.get("schoolId"))
+                        : null;
+                    const [users, schools] = await Promise.all([
+                        getPagedRows(() => {
+                            let userQuery = supabase.from("users").select("email, name, status, school_id, lastSignedIn");
+                            if (schoolId) userQuery = userQuery.eq("school_id", schoolId);
+                            return userQuery;
+                        }, ["id"]),
+                        getPagedRows(() => {
+                            let schoolQuery = supabase.from("schools").select("id, name, logo_url, config_json");
+                            if (schoolId) schoolQuery = schoolQuery.eq("id", schoolId);
+                            return schoolQuery;
+                        }, ["id"])
                     ]);
-                    if (usersError) throw usersError;
-                    if (schoolsError) throw schoolsError;
 
                     const userRows = (users || []).filter((user) => {
                         if (!query) return true;
                         return [user.email, user.name, user.status, user.school_id]
                             .some((value) => String(value || "").toLowerCase().includes(query));
                     });
-                    const schoolRows = (schools || []).map((school) => {
+                    const schoolRows = schools.map((school) => {
                         const creator = (users || []).find((user) => user.school_id === school.id) || null;
                         return { ...school, creator };
                     }).filter((school) => {
@@ -1877,49 +1771,58 @@ function handleRequest(req, res) {
             return;
         }
 
-        let body = "";
-        req.on("data", (chunk) => { body += chunk.toString(); });
-        req.on("end", async () => {
-            try {
-                requireSupabase();
-                const payload = JSON.parse(body || "{}");
-                const admin = await requireAdministrator(payload.adminEmail);
+        (async () => {
+            requireSupabase();
+            const payload = await readJsonBody(req);
 
-                if (url.pathname === "/api/admin/users/update") {
-                    const email = String(payload.email || "").trim().toLowerCase();
-                    const status = String(payload.status || "").trim();
-                    if (!email || !["Student", "Teacher", "School Administrator", "Administrator", "Guest"].includes(status)) {
-                        sendJson(res, 400, { success: false, error: "Valid email and role are required" });
-                        return;
-                    }
-                    if (email === String(admin.email).toLowerCase()) {
-                        sendJson(res, 400, { success: false, error: "You cannot change your own role" });
-                        return;
-                    }
-                    const { error } = await supabase.from("users").update({ status }).eq("email", email);
-                    if (error) throw error;
-                } else if (url.pathname === "/api/admin/users/delete") {
-                    const email = String(payload.email || "").trim().toLowerCase();
-                    if (!email || email === String(admin.email).toLowerCase()) {
-                        sendJson(res, 400, { success: false, error: "A different user email is required" });
-                        return;
-                    }
-                    const { error } = await supabase.from("users").delete().eq("email", email);
-                    if (error) throw error;
-                } else {
-                    const schoolId = String(payload.schoolId || "").trim();
-                    if (!schoolId || !payload.config_json || typeof payload.config_json !== "object") {
-                        sendJson(res, 400, { success: false, error: "School id and configuration are required" });
-                        return;
-                    }
-                    const { error } = await supabase.from("schools").update({ config_json: payload.config_json }).eq("id", schoolId);
-                    if (error) throw error;
+            if (url.pathname === "/api/admin/users/update") {
+                const admin = await requireAdministrator(req);
+                const email = String(payload.email || "").trim().toLowerCase();
+                const status = String(payload.status || "").trim();
+                const validGlobalRoles = ["Student", "Teacher", "School Administrator", "Administrator", "Guest", "Admin"];
+                if (!email || !validGlobalRoles.includes(status)) {
+                    throw httpError("Valid email and role are required.", 400);
                 }
-
-                sendJson(res, 200, { success: true });
-            } catch (err) {
-                sendJson(res, err.statusCode || 500, { success: false, error: err.message });
+                if (String(admin.email).toLowerCase() === email) {
+                    throw httpError("You cannot change your own role.", 400);
+                }
+                const { data: target, error: targetError } = await supabase
+                    .from("users")
+                    .select("id, school_id")
+                    .ilike("email", email)
+                    .maybeSingle();
+                if (targetError) throw targetError;
+                if (!target) throw httpError("User account not found.", 404);
+                const { error: updateError } = await supabase.from("users").update({ status }).eq("id", target.id);
+                if (updateError) throw updateError;
+            } else if (url.pathname === "/api/admin/users/delete") {
+                const adminUser = await requireAdministrator(req);
+                const email = String(payload.email || "").trim().toLowerCase();
+                if (!email || email === String(adminUser.email).toLowerCase()) {
+                    throw httpError("A different user email is required.", 400);
+                }
+                const { data: target, error: targetError } = await supabase
+                    .from("users")
+                    .select("id")
+                    .ilike("email", email)
+                    .maybeSingle();
+                if (targetError) throw targetError;
+                if (!target) throw httpError("User account not found.", 404);
+                const { error: deleteError } = await supabase.from("users").delete().eq("id", target.id);
+                if (deleteError) throw deleteError;
+            } else {
+                await requireAdministrator(req);
+                const schoolId = String(payload.schoolId || "").trim();
+                if (!schoolId || !payload.config_json || typeof payload.config_json !== "object") {
+                    throw httpError("School id and configuration are required.", 400);
+                }
+                const { error: updateError } = await supabase.from("schools").update({ config_json: payload.config_json }).eq("id", schoolId);
+                if (updateError) throw updateError;
             }
+
+            sendJson(res, 200, { success: true });
+        })().catch((error) => {
+            sendJson(res, error.statusCode || 500, { success: false, error: error.message });
         });
         return;
     }

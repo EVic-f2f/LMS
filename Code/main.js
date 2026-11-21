@@ -13,7 +13,6 @@ const App = {
   realtimeController: null,
 
   async init() {
-    await Auth.ensureDefaultAdmin();
     this.loadAccount();
     if (!this.currentAccount) {
       window.location.href = "sign-in.html";
@@ -26,7 +25,10 @@ const App = {
         const requestedSchoolId = new URLSearchParams(window.location.search).get("schoolId");
         const schoolQuery = requestedSchoolId ? `&schoolId=${encodeURIComponent(requestedSchoolId)}` : "";
         const url = `/api/schools/by-user?email=${encodeURIComponent(this.currentAccount.email)}${schoolQuery}`;
-        const response = await fetch(url);
+        const token = localStorage.getItem(Auth.SESSION_KEY);
+        const response = await fetch(url, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
         const json = await response.json();
 
         if (response.ok && json?.config_json) {
@@ -74,11 +76,13 @@ const App = {
     if (typeof Classes !== "undefined") {
       Classes.init();
     }
+    this.renderHomeDashboard();
 
     // Open a requested tab from public-page links, otherwise default to Home.
     const requestedTab = window.location.hash.slice(1);
-    document.querySelector(`.tablinks[data-tab="${requestedTab}"]`)?.click()
-      || document.querySelector('.tablinks[data-tab="Home"]')?.click();
+    const requestedTabButton = document.querySelector(`.tablinks[data-tab="${requestedTab}"]`);
+    const homeTabButton = document.querySelector('.tablinks[data-tab="Home"]');
+    (requestedTabButton || homeTabButton)?.click();
   },
 
   applyTheme() {
@@ -271,6 +275,10 @@ const App = {
     if (settingsTab) {
       settingsTab.style.display = canEdit ? 'flex' : 'none';
     }
+    const quickSettings = document.querySelector('[data-quick-settings]');
+    if (quickSettings) {
+      quickSettings.style.display = canEdit ? 'flex' : 'none';
+    }
 
     const hdTab = document.querySelector('.tablinks[data-tab="HD"]');
     if (hdTab) {
@@ -279,7 +287,74 @@ const App = {
 
     const topbarMeta = document.querySelector('.topbar-meta');
     if (topbarMeta) {
-      topbarMeta.textContent = this.currentAccount ? `${this.currentAccount.status}` : 'Guest';
+      topbarMeta.textContent = this.currentAccount ? `VIC systems · ${this.currentAccount.status}` : 'VIC systems';
+    }
+    const headingUser = document.getElementById('page-heading-user');
+    if (headingUser && this.currentAccount) {
+      headingUser.innerHTML = `<span class="user-status-dot"></span><span>${Classes.escapeHtml(this.currentAccount.name || this.currentAccount.email)}</span>`;
+    }
+  },
+
+  async renderHomeDashboard() {
+    const currentUser = this.currentAccount || Auth.getCurrentUser();
+    const classesContainer = document.getElementById('home-classes');
+    if (!currentUser || !classesContainer) return;
+
+    const firstName = String(currentUser.name || '').trim().split(/\s+/)[0] || 'there';
+    const hour = new Date().getHours();
+    const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+    const welcome = document.getElementById('home-welcome');
+    const intro = document.getElementById('home-intro');
+    const avatar = document.getElementById('home-avatar');
+    if (welcome) welcome.textContent = `${greeting}, ${firstName}`;
+    if (intro) intro.textContent = `${this.currentSchoolName || this.config.schoolName || 'Your school'} · ${currentUser.status || 'Member'} workspace`;
+    if (avatar) avatar.textContent = firstName.slice(0, 1).toUpperCase();
+
+    try {
+      const classes = await Classes.apiRequest('/api/classes');
+      const myClasses = currentUser.status === "Student"
+        ? classes.filter((item) => item.isEnrolled)
+        : classes;
+      const studentCount = myClasses.reduce((total, item) => total + Number(item.studentCount || 0), 0);
+      const pendingRequestCount = myClasses.reduce((total, item) => total + (item.pendingRequests || []).length, 0);
+      const classCount = document.getElementById('home-class-count');
+      const studentCountEl = document.getElementById('home-student-count');
+      const requestCount = document.getElementById('home-request-count');
+      const requestLabel = document.getElementById('home-request-label');
+      const canReviewRequests = ["Teacher", "School Administrator", "Administrator", "Admin"].includes(currentUser.status);
+      if (classCount) classCount.textContent = String(myClasses.length);
+      if (studentCountEl) studentCountEl.textContent = String(studentCount);
+      if (requestLabel) requestLabel.textContent = canReviewRequests ? "PENDING REQUESTS" : "ACCOUNT ROLE";
+      if (requestCount) requestCount.textContent = canReviewRequests ? String(pendingRequestCount) : currentUser.status;
+
+      if (!myClasses.length) {
+        classesContainer.innerHTML = `
+          <div class="empty-state">
+            <span class="empty-state-icon">C</span>
+            <strong>No classes to show yet</strong>
+            <p>Your classes will appear here when you join one or create a class.</p>
+            <button type="button" class="text-action" onclick="UI.openTab(null, 'Classes')">Explore classes <span aria-hidden="true">→</span></button>
+          </div>`;
+        return;
+      }
+
+      classesContainer.innerHTML = myClasses.slice(0, 4).map((classInfo) => `
+        <button type="button" class="home-class-card" onclick="Classes.openClassDetail('${Classes.escapeHtml(classInfo.id)}')">
+          <span class="class-mark">${Classes.escapeHtml(String(classInfo.name || 'C').slice(0, 1).toUpperCase())}</span>
+          <span class="home-class-copy">
+            <strong>${Classes.escapeHtml(classInfo.name || 'Untitled class')}</strong>
+            <small>${Classes.escapeHtml(classInfo.subject || 'Class workspace')} · ${Number(classInfo.studentCount || 0)} students</small>
+          </span>
+          <span class="quick-link-arrow" aria-hidden="true">→</span>
+        </button>`).join('');
+    } catch (error) {
+      console.error('Unable to load home dashboard classes:', error);
+      classesContainer.innerHTML = `
+        <div class="empty-state empty-state-error">
+          <strong>Classes could not be loaded</strong>
+          <p>${Classes.escapeHtml(error.message || 'Check your connection and try again.')}</p>
+          <button type="button" class="text-action" onclick="App.renderHomeDashboard()">Try again <span aria-hidden="true">→</span></button>
+        </div>`;
     }
   },
 
@@ -317,6 +392,8 @@ const App = {
       if (sidebarName) sidebarName.textContent = school.name;
       const topbarBrand = document.querySelector(".topbar-brand");
       if (topbarBrand) topbarBrand.textContent = school.name;
+      const topbarSchoolName = document.getElementById("topbar-school-name");
+      if (topbarSchoolName) topbarSchoolName.textContent = school.name;
     }
   },
 
@@ -340,6 +417,8 @@ const App = {
     if (topbarBrand) {
       topbarBrand.textContent = schoolName;
     }
+    const topbarSchoolName = document.getElementById("topbar-school-name");
+    if (topbarSchoolName) topbarSchoolName.textContent = schoolName;
     const homeWelcome = document.getElementById("home-welcome");
     if (homeWelcome) homeWelcome.textContent = `Welcome to ${schoolName} LMS`;
     document.title = `${schoolName} LMS`;

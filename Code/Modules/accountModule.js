@@ -48,11 +48,6 @@ const Account = {
     }
 
     container.innerHTML = "";
-    const vicHomeLink = document.createElement("a");
-    vicHomeLink.href = "vic-home.html";
-    vicHomeLink.textContent = "Back to VIC systems home";
-    vicHomeLink.style.cssText = "display: inline-block; margin-bottom: 16px; color: var(--primary); font-weight: 700;";
-    container.appendChild(vicHomeLink);
     this.renderProfile(container);
   },
 
@@ -88,39 +83,62 @@ const Account = {
   },
 
   renderProfile(container) {
-    const form = document.createElement("form");
-    form.id = "account-profile-form";
-    form.style.cssText = "display:grid; gap: 16px; padding: 18px; background: #f8fbff; border-radius: 12px; border: 1px solid #dfe7ed;";
-    form.onsubmit = (event) => {
-      event.preventDefault();
-      this.handleProfileSave(form);
-    };
+    const fullName = this.escapeHtml(this.account.name || "LMS member");
+    const email = this.escapeHtml(this.account.email || "");
+    const role = this.escapeHtml(this.account.status || this.defaultStatus);
+    const initials = this.escapeHtml(String(this.account.name || this.account.email || "U").trim().slice(0, 1).toUpperCase());
+    const signedIn = this.escapeHtml(this.formatLastSignedIn(this.account.lastSignedIn));
+    const profileCard = document.createElement("section");
+    profileCard.className = "account-profile-card";
+    profileCard.innerHTML = `
+      <div class="account-profile-heading">
+        <div class="account-avatar" aria-hidden="true">${initials}</div>
+        <div class="account-profile-name">
+          <div class="section-eyebrow">YOUR PROFILE</div>
+          <h2>${fullName}</h2>
+          <span class="account-role-chip">${role}</span>
+        </div>
+      </div>
+      <div class="account-detail-grid">
+        <div class="account-detail"><span>EMAIL ADDRESS</span><strong>${email}</strong></div>
+        <div class="account-detail"><span>ACCOUNT TYPE</span><strong>${role}</strong></div>
+        <div class="account-detail"><span>LAST SIGN IN</span><strong>${signedIn}</strong></div>
+      </div>
+      <p class="account-profile-note">Your name, email, and account role are managed by your account. Contact your school administrator if they need to be changed.</p>`;
+    container.appendChild(profileCard);
 
-    const allowedStatuses = Auth.getAllowedStatuses();
-    form.appendChild(this.createField("Full Name", "text", this.account.name, "name"));
-    form.appendChild(this.createField("Email Address", "email", this.account.email, "email"));
-    form.appendChild(this.createSelectField("Role", allowedStatuses, this.account.status, "status"));
-    form.appendChild(this.createCheckboxField("Receive grade notifications", this.account.preferences.notifications, "notifications"));
-    form.appendChild(this.createCheckboxField("Keep me signed in on this device", this.account.preferences.autoLogin, "autoLogin"));
-
-    const saveButton = document.createElement("button");
-    saveButton.type = "submit";
-    saveButton.textContent = "Save Profile";
-    saveButton.style.cssText = "padding: 14px 20px; border: none; border-radius: 8px; background: var(--accent); color: white; font-weight: 700; cursor: pointer;";
-    form.appendChild(saveButton);
-
-    const buttonWrapper = document.createElement("div");
-    buttonWrapper.style.cssText = "display:flex; justify-content:flex-end; margin-top: 16px; gap: 12px;";
-
+    const actions = document.createElement("section");
+    actions.className = "account-settings-card";
+    actions.innerHTML = `
+      <div class="section-heading">
+        <div><div class="section-eyebrow">ACCOUNT ACTIONS</div><h2>Manage your session</h2></div>
+      </div>
+      <p class="account-card-description">Your role and profile information are read from your signed-in account. Sign out to end this session on this device.</p>`;
+    const actionButtons = document.createElement("div");
+    actionButtons.className = "account-actions";
+    const workspaceLink = document.createElement("a");
+    workspaceLink.className = "app-secondary-button";
+    workspaceLink.href = "main.html";
+    workspaceLink.textContent = "Open school workspace";
+    actionButtons.appendChild(workspaceLink);
     const signOut = document.createElement("button");
     signOut.type = "button";
-    signOut.textContent = "Sign Out";
-    signOut.style.cssText = "padding: 10px 16px; border:none; border-radius:8px; background:#e74c3c; color:white; cursor:pointer;";
+    signOut.className = "app-primary-button";
+    signOut.textContent = "Sign out";
     signOut.onclick = () => this.signOut();
-    buttonWrapper.appendChild(signOut);
+    actionButtons.appendChild(signOut);
+    actions.appendChild(actionButtons);
+    container.appendChild(actions);
+  },
 
-    container.appendChild(form);
-    container.appendChild(buttonWrapper);
+  escapeHtml(value) {
+    return String(value || "").replace(/[&<>"']/g, (character) => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;"
+    })[character]);
   },
 
   createField(labelText, type, value, name) {

@@ -7,23 +7,32 @@
   <link rel="stylesheet" href="/styles/main.css">
   <script src="/Code/Modules/vicThemeModule.js"></script>
 </head>
-<body class="vic-home-page">
+<body class="lms-app account-standalone">
   <header class="topbar">
-    <a class="topbar-brand" href="vic-home.html">VIC systems</a>
-    <nav class="topbar-actions" aria-label="Account navigation">
-      <a class="topbar-action" href="vic-home.html">Back</a>
-    </nav>
+    <div class="topbar-brand">YOUR ACCOUNT</div>
+    <div class="topbar-meta">VIC systems</div>
   </header>
-  <main class="main vic-home-main">
-    <h2>Account</h2>
-    <section class="themed-panel" aria-label="Account profile">
-      <div id="account-content"></div>
-    </section>
+  <nav class="sidebar" aria-label="Account navigation">
+    <div class="sidebar-header">
+      <div class="sidebar-logo"><img src="/Storage/Image_assets/logo.jpg" alt="VIC systems"></div>
+    </div>
+    <a class="tablinks" href="main.html" aria-label="School workspace" title="School workspace"><span class="monitor-nav-icon">S</span><span class="btn-text">School workspace</span></a>
+    <a class="tablinks active" href="account.html" aria-label="Account" title="Account"><span class="monitor-nav-icon">A</span><span class="btn-text">Account</span></a>
+    <a class="tablinks bottom-tab" href="vic-home.html" aria-label="VIC Home" title="VIC Home"><span class="monitor-nav-icon">V</span><span class="btn-text">VIC Home</span></a>
+  </nav>
+  <main class="main">
+    <div class="page-heading">
+      <div><div class="page-eyebrow">VIC SYSTEMS / PROFILE</div><h1>Account</h1></div>
+    </div>
+    <div id="account-content" class="account-page"></div>
   </main>
   <script src="/Code/Modules/storageModule.js"></script>
   <script src="/Code/Modules/authModule.js"></script>
   <script src="/Code/Modules/accountModule.js"></script>
   <script>
+    const sidebar = document.querySelector('.sidebar');
+    sidebar.addEventListener('mouseenter', () => document.body.classList.add('sidebar-expanded'));
+    sidebar.addEventListener('mouseleave', () => document.body.classList.remove('sidebar-expanded'));
     Account.render();
   </script>
 </body>

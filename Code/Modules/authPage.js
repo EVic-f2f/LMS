@@ -1,5 +1,4 @@
 document.addEventListener("DOMContentLoaded", async () => {
-  await Auth.ensureDefaultAdmin();
 
   const currentUser = Auth.getCurrentUser();
   const page = window.location.pathname.split("/").pop();

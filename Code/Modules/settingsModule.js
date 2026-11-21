@@ -4,6 +4,7 @@
 
 const Settings = {
   config: {},
+  activeTab: "info",
 
   async load() {
     try {
@@ -16,8 +17,11 @@ const Settings = {
         ? `&schoolId=${encodeURIComponent(App.currentSchoolId)}`
         : "";
       const url = `/api/schools/by-user?email=${encodeURIComponent(email)}${schoolQuery}`;
+      const token = localStorage.getItem(Auth.SESSION_KEY);
 
-      const response = await fetch(url);
+      const response = await fetch(url, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      });
       const json = await response.json();
 
       if (response.ok && json?.config_json) {
@@ -61,40 +65,66 @@ const Settings = {
     const config = this.config || {};
     const theme = config.theme || {};
     const fields = Array.isArray(config.gradeFields) ? config.gradeFields : [];
+    const schoolName = config.schoolName || App.currentSchoolName || "School settings";
+    const location = config.location || "Location not set";
+    const previewColors = ["primary", "secondary", "accent", "background"].map((key) => {
+      const color = this.isColorValue(theme[key]) ? this.normalizeColor(theme[key]) : "#d8d8d8";
+      return `<span class="settings-preview-swatch" style="--swatch-color:${this.escapeHtml(color)}" title="${key}"></span>`;
+    }).join("");
 
     container.innerHTML = `
       <div class="settings-page">
+        <section class="settings-overview-card">
+          <div class="settings-overview-copy">
+            <div class="section-eyebrow">WORKSPACE CONFIGURATION</div>
+            <h2>${this.escapeHtml(schoolName)}</h2>
+            <p>${this.escapeHtml(location)} <span aria-hidden="true">·</span> ${fields.length} grade fields configured</p>
+          </div>
+          <div class="settings-theme-preview" aria-label="Current school theme">
+            <span class="settings-theme-label">CURRENT THEME</span>
+            <div class="settings-preview-swatches">${previewColors}</div>
+          </div>
+        </section>
+        <div class="settings-intro">
+          <div><div class="section-eyebrow">PREFERENCES</div><h2>School settings</h2></div>
+          <p>Manage your school's identity, colors, grade fields, and API connection.</p>
+        </div>
         <nav class="settings-tabs" aria-label="Settings sections">
-          <button type="button" class="settings-tab active" data-settings-tab="info">Info</button>
-          <button type="button" class="settings-tab" data-settings-tab="theme">Theme</button>
-          <button type="button" class="settings-tab" data-settings-tab="fields">Fields</button>
-          <button type="button" class="settings-tab" data-settings-tab="apis">APIs</button>
+          <button type="button" class="settings-tab ${this.activeTab === "info" ? "active" : ""}" data-settings-tab="info">School info</button>
+          <button type="button" class="settings-tab ${this.activeTab === "theme" ? "active" : ""}" data-settings-tab="theme">Theme</button>
+          <button type="button" class="settings-tab ${this.activeTab === "fields" ? "active" : ""}" data-settings-tab="fields">Grade fields</button>
+          <button type="button" class="settings-tab ${this.activeTab === "apis" ? "active" : ""}" data-settings-tab="apis">API</button>
         </nav>
         <form id="settings-form" class="settings-form">
-          <section class="settings-panel active" data-settings-panel="info">
-            <h3>School Information</h3>
+          <section class="settings-panel ${this.activeTab === "info" ? "active" : ""}" data-settings-panel="info">
+            <div class="settings-panel-heading"><h3>School information</h3><p>These details appear across your school workspace.</p></div>
             ${this.settingInput("School Name", "schoolName", config.schoolName || "")}
             ${this.settingInput("Location", "location", config.location || "")}
           </section>
-          <section class="settings-panel" data-settings-panel="theme">
-            <h3>School Theme</h3>
+          <section class="settings-panel ${this.activeTab === "theme" ? "active" : ""}" data-settings-panel="theme">
+            <div class="settings-panel-heading"><h3>School theme</h3>
             <p class="settings-help">These colors apply to this school's LMS.</p>
+            </div>
             <div class="settings-color-grid">
               ${["primary", "secondary", "accent", "success", "warning", "background", "text"].map((key) => this.settingColor(key, theme[key] || "")).join("")}
             </div>
           </section>
-          <section class="settings-panel" data-settings-panel="fields">
-            <h3>Grade Fields</h3>
+          <section class="settings-panel ${this.activeTab === "fields" ? "active" : ""}" data-settings-panel="fields">
+            <div class="settings-panel-heading"><h3>Grade fields</h3>
             <p class="settings-help">Use one field per line.</p>
+            </div>
             <textarea class="settings-input settings-fields-input" data-setting-key="gradeFields" rows="8">${this.escapeHtml(fields.join("\n"))}</textarea>
           </section>
-          <section class="settings-panel" data-settings-panel="apis">
-            <h3>APIs</h3>
+          <section class="settings-panel ${this.activeTab === "apis" ? "active" : ""}" data-settings-panel="apis">
+            <div class="settings-panel-heading"><h3>API connection</h3><p>Configure the endpoint used by connected school services.</p></div>
             ${this.settingInput("Student API Endpoint", "apiEndpoint", config.apiEndpoint || "")}
           </section>
           <div class="settings-actions">
-            <button type="button" class="settings-save" id="settings-save">Save Settings</button>
-            <button type="button" class="settings-reload" id="settings-reload">Reload</button>
+            <div id="settings-save-status" class="settings-save-status" role="status" aria-live="polite"></div>
+            <div class="settings-action-buttons">
+              <button type="button" class="settings-save app-primary-button" id="settings-save">Save changes</button>
+              <button type="button" class="settings-reload app-secondary-button" id="settings-reload">Reload</button>
+            </div>
           </div>
         </form>
       </div>`;
@@ -104,7 +134,8 @@ const Settings = {
         container.querySelectorAll(".settings-tab").forEach((item) => item.classList.remove("active"));
         container.querySelectorAll(".settings-panel").forEach((panel) => panel.classList.remove("active"));
         tab.classList.add("active");
-        container.querySelector(`[data-settings-panel="${tab.dataset.settingsTab}"]`)?.classList.add("active");
+          this.activeTab = tab.dataset.settingsTab;
+          container.querySelector(`[data-settings-panel="${tab.dataset.settingsTab}"]`)?.classList.add("active");
       });
     });
     container.querySelectorAll("[data-theme-key]").forEach((colorInput) => {
@@ -381,9 +412,18 @@ const Settings = {
       App.applyTheme();
       App.updateSidebarInfo();
       this.render();
-      alert("Settings saved successfully.");
+      const status = document.getElementById("settings-save-status");
+      if (status) {
+        status.textContent = "Changes saved.";
+        status.classList.add("is-success");
+      }
     } catch (e) {
-      alert("✗ Error saving settings: " + e.message);
+      console.error("Failed to save school settings:", e);
+      const status = document.getElementById("settings-save-status");
+      if (status) {
+        status.textContent = `Could not save changes: ${e.message}`;
+        status.classList.add("is-error");
+      }
     }
   }
 };
