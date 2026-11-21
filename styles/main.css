@@ -284,6 +284,26 @@ header.topbar {
   color: #8d95a1;
 }
 
+body.lms-app .lms-clock {
+  display: grid;
+  justify-items: end;
+  margin-left: auto;
+  color: #ffffff;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+
+body.lms-app .lms-clock time {
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+body.lms-app .lms-clock span {
+  color: #bdbdbd;
+  font-size: 0.62rem;
+  letter-spacing: 0.04em;
+}
+
 .topbar-actions {
   display: flex;
   align-items: center;
@@ -1101,23 +1121,23 @@ button[type="submit"]:active {
 }
 
 /* Hover/expanded state controlled by JS adding 'sidebar-expanded' to body */
-body.sidebar-expanded .sidebar {
+body:not(.lms-app).sidebar-expanded .sidebar {
   width: min(var(--sidebar-expanded), calc(100vw - 24px));
   max-width: min(220px, calc(100vw - 24px));
   padding: 24px 16px 20px;
 }
 
-body.sidebar-expanded .main {
+body:not(.lms-app).sidebar-expanded .main {
   width: calc(100% - min(var(--sidebar-expanded), calc(100vw - 24px))) !important;
   margin-left: min(var(--sidebar-expanded), calc(100vw - 24px)) !important;
 }
 
-body.sidebar-expanded header.topbar {
+body:not(.lms-app).sidebar-expanded header.topbar {
   left: 0;
 }
 
-body.sidebar-expanded .main > h2,
-body.sidebar-expanded .tabcontent {
+body:not(.lms-app).sidebar-expanded .main > h2,
+body:not(.lms-app).sidebar-expanded .tabcontent {
   margin-left: 0 !important;
 }
 
@@ -1145,7 +1165,7 @@ body.lms-app.sidebar-expanded .topbar {
     margin-left: 60px;
   }
 
-  body.sidebar-expanded .main {
+  body:not(.lms-app).sidebar-expanded .main {
     width: calc(100% - 180px) !important;
     margin-left: 180px !important;
   }
@@ -1200,7 +1220,7 @@ body.lms-app.sidebar-expanded .topbar {
     padding: 15px;
   }
 
-  body.sidebar-expanded .main {
+  body:not(.lms-app).sidebar-expanded .main {
     margin-left: 0 !important;
   }
 
@@ -1474,6 +1494,7 @@ body.lms-app.sidebar-expanded .sidebar button {
 body.lms-app .main {
   width: calc(100% - var(--sidebar-collapsed));
   max-width: none;
+  min-width: 0;
   min-height: calc(100vh - var(--topbar-height));
   margin: var(--topbar-height) 0 0 var(--sidebar-collapsed);
   padding: 30px clamp(20px, 4vw, 56px) 48px;
@@ -1535,8 +1556,16 @@ body.lms-app .user-status-dot {
 
 body.lms-app .tabcontent {
   width: 100%;
+  min-width: 0;
   padding: 0;
   color: var(--app-ink);
+}
+
+body.lms-app #classes-content,
+body.lms-app #class-detail-content {
+  width: 100%;
+  min-width: 0;
+  overflow-x: auto;
 }
 
 body.lms-app .dashboard-hero,
@@ -2812,5 +2841,151 @@ body.public-vic .topbar {
 
   body.lms-app .hd-access-badge {
     align-self: flex-start;
+  }
+}
+
+body.lms-app .school-updates-panel {
+  margin-top: 24px;
+  padding: clamp(18px, 3vw, 28px);
+}
+
+body.lms-app .school-updates-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: 12px;
+}
+
+body.lms-app .school-update-card {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid var(--app-line);
+  border-radius: 14px;
+  background: #fff;
+  overflow-wrap: anywhere;
+}
+
+body.lms-app .school-update-heading,
+body.lms-app .school-update-actions,
+body.lms-app .school-update-form-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+body.lms-app .school-update-heading {
+  margin-bottom: 12px;
+  color: var(--app-muted);
+  font-size: 0.72rem;
+}
+
+body.lms-app .school-update-category {
+  color: var(--app-ink);
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+body.lms-app .school-update-category.is-alert {
+  color: #9c3e3e;
+}
+
+body.lms-app .school-update-card h3 {
+  margin-bottom: 8px;
+  font-size: 1rem;
+}
+
+body.lms-app .school-update-card p,
+body.lms-app .school-updates-empty {
+  color: var(--app-muted);
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+body.lms-app .school-update-actions {
+  justify-content: flex-start;
+  margin-top: 16px;
+}
+
+body.lms-app .school-update-delete {
+  color: #9c3e3e;
+}
+
+body.lms-app .school-update-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  gap: 12px;
+  margin: 18px 0;
+  padding: 18px;
+  border: 1px solid var(--app-line);
+  border-radius: 14px;
+  background: #faf9f8;
+}
+
+body.lms-app .school-update-form label {
+  display: grid;
+  gap: 6px;
+  color: var(--app-muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+body.lms-app .school-update-form input,
+body.lms-app .school-update-form select,
+body.lms-app .school-update-form textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--app-line);
+  border-radius: 9px;
+  background: #fff;
+  color: var(--app-ink);
+  font: inherit;
+}
+
+body.lms-app .school-update-form label:nth-child(3),
+body.lms-app .school-update-form-actions {
+  grid-column: 1 / -1;
+}
+
+body.lms-app .school-update-form textarea {
+  resize: vertical;
+}
+
+body.lms-app .school-update-form-actions {
+  justify-content: flex-end;
+}
+
+body.lms-app .school-update-status {
+  flex: 1;
+  min-height: 1.2em;
+  margin: 0;
+  color: var(--app-muted);
+}
+
+@media (max-width: 640px) {
+  body.lms-app .topbar {
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+
+  body.lms-app .topbar-meta,
+  body.lms-app .lms-clock span {
+    display: none;
+  }
+
+  body.lms-app .lms-clock time {
+    font-size: 0.75rem;
+  }
+
+  body.lms-app .school-update-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  body.lms-app .school-update-form label,
+  body.lms-app .school-update-form-actions {
+    grid-column: 1;
   }
 }

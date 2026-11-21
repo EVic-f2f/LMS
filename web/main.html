@@ -16,6 +16,10 @@
 <header class="topbar">
   <div class="topbar-brand" id="topbar-school-name">Your School</div>
   <div class="topbar-meta" id="topbar-user-label">VIC systems</div>
+  <div class="lms-clock" aria-label="Local date and time">
+    <time id="lms-clock-time">--:--:--</time>
+    <span id="lms-clock-date"></span>
+  </div>
 </header>
 
 <nav class="sidebar" aria-label="Main navigation">
@@ -104,11 +108,24 @@
         <button type="button" class="quick-link" data-quick-settings onclick="UI.openTab(null, 'Settings')"><span class="quick-link-icon">S</span><span><strong>School settings</strong><small>Manage your school's workspace</small></span><span class="quick-link-arrow">→</span></button>
       </aside>
     </section>
+
+    <section class="home-section-card school-updates-panel" aria-labelledby="school-updates-title">
+      <div class="section-heading">
+        <div>
+          <div class="section-eyebrow">YOUR SCHOOL</div>
+          <h2 id="school-updates-title">School news &amp; updates</h2>
+        </div>
+      </div>
+      <div id="school-updates-editor"></div>
+      <div id="school-updates-list" class="school-updates-list" aria-live="polite">
+        Loading school updates…
+      </div>
+    </section>
   </div>
 
   <div id="Classes" class="tabcontent">
     <div id="classes-content"></div>
-  </main>
+  </div>
 
   <div id="ClassDetail" class="tabcontent">
     <div id="class-detail-content"></div>
@@ -129,7 +146,7 @@
   <div class="context-menu" id="context-menu">
     <ul id="context-menu-list"></ul>
   </div>
-</div>
+</main>
 
 <script src="/Code/Modules/storageModule.js"></script>
 <script src="/Code/Modules/authModule.js"></script>
@@ -139,6 +156,7 @@
 <script src="/Code/Modules/tableModule.js"></script>
 <script src="/Code/Modules/uiModule.js"></script>
 <script src="/Code/Modules/classesModule.js"></script>
+<script src="/Code/Modules/schoolUpdatesModule.js"></script>
 <script src="/Code/Modules/settingsModule.js"></script>
 <script src="/Code/Modules/accountModule.js"></script>
 <script src="/Code/Modules/hdModule.js"></script>

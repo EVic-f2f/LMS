@@ -11,6 +11,7 @@ const App = {
   refreshInProgress: false,
   pendingRealtimeRefresh: false,
   realtimeController: null,
+  clockTimer: null,
 
   async init() {
     this.loadAccount();
@@ -60,6 +61,7 @@ const App = {
 
     // Update sidebar and header branding
     this.updateSidebarInfo();
+    this.startClock();
 
     // Initialize modules
     Table.gradeFields = this.config.gradeFields || Table.gradeFields;
@@ -77,6 +79,9 @@ const App = {
       Classes.init();
     }
     this.renderHomeDashboard();
+    if (typeof SchoolUpdates !== "undefined") {
+      SchoolUpdates.load();
+    }
 
     // Open a requested tab from public-page links, otherwise default to Home.
     const requestedTab = window.location.hash.slice(1);
@@ -86,18 +91,50 @@ const App = {
   },
 
   applyTheme() {
-    if (this.config.theme) {
-      const theme = this.config.theme;
-      const root = document.documentElement;
-      
-      if (theme.primary) root.style.setProperty('--primary', theme.primary);
-      if (theme.secondary) root.style.setProperty('--secondary', theme.secondary);
-      if (theme.accent) root.style.setProperty('--accent', theme.accent);
-      if (theme.success) root.style.setProperty('--success', theme.success);
-      if (theme.warning) root.style.setProperty('--warning', theme.warning);
-      if (theme.background) root.style.setProperty('--background', theme.background);
-      if (theme.text) root.style.setProperty('--text', theme.text);
-    }
+    const theme = this.config.theme || {};
+    const root = document.body;
+    const properties = {
+      primary: "--primary",
+      secondary: "--secondary",
+      accent: "--accent",
+      success: "--success",
+      warning: "--warning",
+      background: "--background",
+      text: "--text"
+    };
+
+    Object.entries(properties).forEach(([key, property]) => {
+      const value = typeof theme[key] === "string" ? theme[key].trim() : "";
+      if (value) root.style.setProperty(property, value);
+      else root.style.removeProperty(property);
+    });
+  },
+
+  startClock() {
+    const timeElement = document.getElementById("lms-clock-time");
+    const dateElement = document.getElementById("lms-clock-date");
+    if (!timeElement || !dateElement) return;
+
+    const timeFormatter = new Intl.DateTimeFormat(undefined, {
+      hour: "numeric",
+      minute: "2-digit",
+      second: "2-digit"
+    });
+    const dateFormatter = new Intl.DateTimeFormat(undefined, {
+      weekday: "short",
+      month: "short",
+      day: "numeric"
+    });
+    const updateClock = () => {
+      const now = new Date();
+      timeElement.dateTime = now.toISOString();
+      timeElement.textContent = timeFormatter.format(now);
+      dateElement.textContent = dateFormatter.format(now);
+    };
+
+    clearInterval(this.clockTimer);
+    updateClock();
+    this.clockTimer = setInterval(updateClock, 1000);
   },
 
   setupEventListeners() {
@@ -231,6 +268,12 @@ const App = {
     this.refreshInProgress = true;
     try {
       switch (UI.currentTab) {
+        case "Home":
+          await Promise.all([
+            this.renderHomeDashboard(),
+            typeof SchoolUpdates !== "undefined" ? SchoolUpdates.load() : Promise.resolve()
+          ]);
+          break;
         case "Classes":
           await Classes.render();
           break;

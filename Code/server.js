@@ -621,7 +621,8 @@ function initializeRealtime() {
         "classwork",
         "grades",
         "school_settings",
-        "school_themes"
+        "school_themes",
+        "school_announcements"
     ];
     let channel = supabase.channel("lms-live-updates");
     tables.forEach((table) => {
@@ -1174,17 +1175,72 @@ function handleRequest(req, res) {
                     const user = await getAuthenticatedUser(req);
                     const schoolId = await getAuthorizedSchoolId(req, user, requestedSchoolId);
 
-                    const { data: schoolRow, error: schoolErr } = await supabase
-                        .from("schools")
-                        .select("id, name, logo_url, config_json")
-                        .eq("id", schoolId)
-                        .maybeSingle();
+                    const [
+                        { data: schoolRow, error: schoolErr },
+                        { data: settingsRow, error: settingsErr },
+                        { data: themeRow, error: themeErr }
+                    ] = await Promise.all([
+                        supabase.from("schools")
+                            .select("id, name, logo_url, config_json")
+                            .eq("id", schoolId)
+                            .maybeSingle(),
+                        supabase.from("school_settings")
+                            .select("location, grade_fields, api_endpoint")
+                            .eq("school_id", schoolId)
+                            .maybeSingle(),
+                        supabase.from("school_themes")
+                            .select("primary_color, secondary_color, accent_color, success_color, warning_color, background_color, text_color")
+                            .eq("school_id", schoolId)
+                            .maybeSingle()
+                    ]);
 
                     if (schoolErr) throw schoolErr;
+                    if (settingsErr) throw settingsErr;
+                    if (themeErr) throw themeErr;
                     if (!schoolRow) {
                         sendJson(res, 404, { success: false, error: "School not found" });
                         return;
                     }
+
+                    const storedConfig = schoolRow.config_json && typeof schoolRow.config_json === "object"
+                        && !Array.isArray(schoolRow.config_json)
+                        ? schoolRow.config_json
+                        : {};
+                    const storedTheme = storedConfig.theme && typeof storedConfig.theme === "object"
+                        && !Array.isArray(storedConfig.theme)
+                        ? storedConfig.theme
+                        : {};
+                    const normalizedTheme = {};
+                    const themeColumns = {
+                        primary: "primary_color",
+                        secondary: "secondary_color",
+                        accent: "accent_color",
+                        success: "success_color",
+                        warning: "warning_color",
+                        background: "background_color",
+                        text: "text_color"
+                    };
+                    Object.entries(themeColumns).forEach(([key, column]) => {
+                        const value = themeRow?.[column];
+                        if (typeof value === "string" && value.trim()) normalizedTheme[key] = value;
+                    });
+                    const normalizedLocation = typeof settingsRow?.location === "string" && settingsRow.location.trim()
+                        ? settingsRow.location
+                        : storedConfig.location;
+                    const normalizedGradeFields = Array.isArray(settingsRow?.grade_fields) && settingsRow.grade_fields.length
+                        ? settingsRow.grade_fields
+                        : storedConfig.gradeFields;
+                    const normalizedApiEndpoint = typeof settingsRow?.api_endpoint === "string" && settingsRow.api_endpoint.trim()
+                        ? settingsRow.api_endpoint
+                        : storedConfig.apiEndpoint;
+                    const configJson = {
+                        ...storedConfig,
+                        schoolName: schoolRow.name || storedConfig.schoolName || "",
+                        location: normalizedLocation ?? "",
+                        gradeFields: normalizedGradeFields ?? [],
+                        apiEndpoint: normalizedApiEndpoint ?? "",
+                        theme: { ...storedTheme, ...normalizedTheme }
+                    };
 
                     sendJson(res, 200, {
                         success: true,
@@ -1193,7 +1249,7 @@ function handleRequest(req, res) {
                             name: schoolRow.name,
                             logo_url: schoolRow.logo_url
                         },
-                        config_json: schoolRow.config_json || {}
+                        config_json: configJson
                     });
                     return;
                 } catch (err) {
@@ -1672,6 +1728,36 @@ function handleRequest(req, res) {
                         return;
                     }
 
+                    const theme = config_json.theme && typeof config_json.theme === "object" && !Array.isArray(config_json.theme)
+                        ? config_json.theme
+                        : {};
+                    const normalizedSettings = {
+                        school_id: schoolId,
+                        location: typeof config_json.location === "string" ? config_json.location.trim() || null : null,
+                        grade_fields: Array.isArray(config_json.gradeFields)
+                            ? config_json.gradeFields.filter((field) => typeof field === "string").map((field) => field.trim()).filter(Boolean)
+                            : [],
+                        api_endpoint: typeof config_json.apiEndpoint === "string" ? config_json.apiEndpoint.trim() || null : null
+                    };
+                    const normalizedTheme = {
+                        school_id: schoolId,
+                        primary_color: typeof theme.primary === "string" ? theme.primary.trim() || null : null,
+                        secondary_color: typeof theme.secondary === "string" ? theme.secondary.trim() || null : null,
+                        accent_color: typeof theme.accent === "string" ? theme.accent.trim() || null : null,
+                        success_color: typeof theme.success === "string" ? theme.success.trim() || null : null,
+                        warning_color: typeof theme.warning === "string" ? theme.warning.trim() || null : null,
+                        background_color: typeof theme.background === "string" ? theme.background.trim() || null : null,
+                        text_color: typeof theme.text === "string" ? theme.text.trim() || null : null
+                    };
+                    const { error: settingsUpsertError } = await supabase
+                        .from("school_settings")
+                        .upsert(normalizedSettings, { onConflict: "school_id" });
+                    if (settingsUpsertError) throw settingsUpsertError;
+                    const { error: themeUpsertError } = await supabase
+                        .from("school_themes")
+                        .upsert(normalizedTheme, { onConflict: "school_id" });
+                    if (themeUpsertError) throw themeUpsertError;
+
                     const schoolUpdates = { config_json };
                     const schoolName = typeof config_json.schoolName === "string"
                         ? config_json.schoolName.trim()
@@ -1697,6 +1783,115 @@ function handleRequest(req, res) {
         sendJson(res, 405, { error: "Method not allowed" });
         return;
     }
+
+    if (url.pathname === "/api/schools/announcements") {
+        setCorsHeaders(res);
+        if (req.method === "OPTIONS") {
+            res.writeHead(204);
+            res.end();
+            return;
+        }
+
+        (async () => {
+            requireSupabase();
+            const user = await getAuthenticatedUser(req);
+
+            if (req.method === "GET") {
+                const schoolId = await getAuthorizedSchoolId(req, user, url.searchParams.get("schoolId"));
+                const { data, error } = await supabase
+                    .from("school_announcements")
+                    .select("id, school_id, title, category, content, created_by, created_at, updated_at")
+                    .eq("school_id", schoolId)
+                    .order("created_at", { ascending: false })
+                    .limit(6);
+                if (error) throw error;
+                sendJson(res, 200, { success: true, announcements: data || [] });
+                return;
+            }
+
+            if (req.method !== "POST") throw httpError("Method not allowed.", 405);
+            if (String(user.status) !== "School Administrator") {
+                throw httpError("Only school administrators can manage school updates.", 403);
+            }
+
+            const payload = await readJsonBody(req);
+            const schoolId = await getAuthorizedSchoolId(req, user, payload.schoolId);
+            const { data: membership, error: membershipError } = await supabase
+                .from("school_memberships")
+                .select("role")
+                .eq("user_id", user.id)
+                .eq("school_id", schoolId)
+                .eq("status", "active")
+                .maybeSingle();
+            if (membershipError) throw membershipError;
+            if (String(membership?.role || "") !== "school_admin") {
+                throw httpError("School administrator membership is required to manage updates.", 403);
+            }
+
+            const action = String(payload.action || "create").toLowerCase();
+            if (action === "delete") {
+                if (!isUuid(payload.id)) throw httpError("A valid update id is required.", 400);
+                const { data, error } = await supabase
+                    .from("school_announcements")
+                    .delete()
+                    .eq("id", payload.id)
+                    .eq("school_id", schoolId)
+                    .select("id")
+                    .maybeSingle();
+                if (error) throw error;
+                if (!data) throw httpError("School update not found.", 404);
+                sendJson(res, 200, { success: true });
+                return;
+            }
+
+            const title = String(payload.title || "").trim();
+            const content = String(payload.content || "").trim();
+            const category = String(payload.category || "news").trim().toLowerCase();
+            if (!title || title.length > 150) {
+                throw httpError("A title between 1 and 150 characters is required.", 400);
+            }
+            if (!content || content.length > 4000) {
+                throw httpError("Update content must be between 1 and 4000 characters.", 400);
+            }
+            if (!["news", "announcement", "event", "alert"].includes(category)) {
+                throw httpError("Choose a valid update category.", 400);
+            }
+
+            const values = {
+                title,
+                content,
+                category,
+                updated_at: new Date().toISOString()
+            };
+            if (action === "update") {
+                if (!isUuid(payload.id)) throw httpError("A valid update id is required.", 400);
+                const { data, error } = await supabase
+                    .from("school_announcements")
+                    .update(values)
+                    .eq("id", payload.id)
+                    .eq("school_id", schoolId)
+                    .select("id, school_id, title, category, content, created_by, created_at, updated_at")
+                    .maybeSingle();
+                if (error) throw error;
+                if (!data) throw httpError("School update not found.", 404);
+                sendJson(res, 200, { success: true, announcement: data });
+                return;
+            }
+            if (action !== "create") throw httpError("Choose create, update, or delete.", 400);
+
+            const { data, error } = await supabase
+                .from("school_announcements")
+                .insert({ ...values, school_id: schoolId, created_by: user.id })
+                .select("id, school_id, title, category, content, created_by, created_at, updated_at")
+                .single();
+            if (error) throw error;
+            sendJson(res, 201, { success: true, announcement: data });
+        })().catch((error) => {
+            sendJson(res, error.statusCode || 500, { success: false, error: error.message });
+        });
+        return;
+    }
+
 
     if (url.pathname === "/api/admin/search") {
         setCorsHeaders(res);
