@@ -56,6 +56,89 @@ const IntroVideo = {
 
     this.overlay = overlay;
     this.canvas = overlay.querySelector("#vic-particle-canvas");
+    this.applyThemeColors();
+    this.loadThemeColors();
+  },
+
+  readCssColor(property, element = document.documentElement) {
+    return getComputedStyle(element).getPropertyValue(property).trim();
+  },
+
+  applyThemeColors(theme = null) {
+    if (!this.overlay) return;
+
+    const body = document.body;
+    const primary = theme?.primary
+      || this.readCssColor("--primary", body)
+      || this.readCssColor("--vic-primary")
+      || "#3498db";
+    const secondary = theme?.secondary
+      || this.readCssColor("--secondary", body)
+      || this.readCssColor("--vic-secondary")
+      || "#2c3e50";
+    const background = theme?.background
+      || this.readCssColor("--vic-background")
+      || this.readCssColor("--background", body)
+      || "#ecf0f1";
+    const surface = theme?.surface
+      || this.readCssColor("--vic-surface")
+      || "#ffffff";
+    const text = theme?.text
+      || this.readCssColor("--text", body)
+      || this.readCssColor("--vic-text")
+      || "#26364a";
+
+    this.themeColors = { primary, secondary, background, surface, text };
+    this.overlay.style.setProperty("--vic-loader-primary", primary);
+    this.overlay.style.setProperty("--vic-loader-secondary", secondary);
+    this.overlay.style.setProperty("--vic-loader-background", background);
+    this.overlay.style.setProperty("--vic-loader-surface", surface);
+    this.overlay.style.setProperty("--vic-loader-text", text);
+    this.overlay.style.background =
+      `linear-gradient(135deg, ${surface} 0%, ${background} 58%, ${secondary} 180%)`;
+  },
+
+  colorRgba(color, alpha) {
+    const value = String(color || "").trim();
+    const hex = value.match(/^#([0-9a-f]{6}|[0-9a-f]{3})$/i);
+    if (hex) {
+      let channels = hex[1];
+      if (channels.length === 3) channels = channels.split("").map((part) => part + part).join("");
+      const red = parseInt(channels.slice(0, 2), 16);
+      const green = parseInt(channels.slice(2, 4), 16);
+      const blue = parseInt(channels.slice(4, 6), 16);
+      return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+    }
+    return `rgba(100, 116, 139, ${alpha})`;
+  },
+
+  async loadThemeColors() {
+    try {
+      const currentUser = JSON.parse(localStorage.getItem("lmsCurrentUser") || "null");
+      if (document.body?.classList.contains("lms-app") && currentUser?.email) {
+        const schoolId = new URLSearchParams(window.location.search).get("schoolId");
+        const query = `email=${encodeURIComponent(currentUser.email)}${schoolId ? `&schoolId=${encodeURIComponent(schoolId)}` : ""}`;
+        const token = localStorage.getItem("lmsSessionToken");
+        const response = await fetch(`/api/schools/by-user?${query}`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
+        if (response.ok) {
+          const data = await response.json();
+          if (data?.config_json?.theme) {
+            this.applyThemeColors(data.config_json.theme);
+            return;
+          }
+        }
+      }
+
+      const response = await fetch("/api/vic-theme", { cache: "no-store" });
+      if (response.ok) {
+        const theme = await response.json();
+        this.applyThemeColors(theme);
+      }
+    } catch (error) {
+      console.warn("Could not theme the loading screen:", error.message);
+    }
   },
 
   showOverlay() {
@@ -74,7 +157,7 @@ const IntroVideo = {
 
     this.overlay.classList.add("is-fading");
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const lingerDelay = reducedMotion ? 150 : 1750;
+    const lingerDelay = reducedMotion ? 150 : 2200;
     this.hideTimer = window.setTimeout(() => {
       if (this.animationFrame) {
         cancelAnimationFrame(this.animationFrame);
@@ -152,7 +235,7 @@ const IntroVideo = {
 
       this.context.beginPath();
       this.context.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
-      this.context.fillStyle = "rgba(100, 116, 139, 0.45)";
+      this.context.fillStyle = this.colorRgba(this.themeColors?.primary, 0.45);
       this.context.fill();
 
       for (let j = i + 1; j < this.particles.length; j += 1) {
@@ -162,7 +245,10 @@ const IntroVideo = {
           this.context.beginPath();
           this.context.moveTo(particle.x, particle.y);
           this.context.lineTo(other.x, other.y);
-          this.context.strokeStyle = `rgba(100, 116, 139, ${(1 - distance / 115) * 0.18})`;
+          this.context.strokeStyle = this.colorRgba(
+            this.themeColors?.secondary,
+            (1 - distance / 115) * 0.18
+          );
           this.context.lineWidth = 0.8;
           this.context.stroke();
         }
@@ -174,7 +260,10 @@ const IntroVideo = {
           this.context.beginPath();
           this.context.moveTo(particle.x, particle.y);
           this.context.lineTo(this.mouse.x, this.mouse.y);
-          this.context.strokeStyle = `rgba(71, 85, 105, ${(1 - mouseDistance / 150) * 0.25})`;
+          this.context.strokeStyle = this.colorRgba(
+            this.themeColors?.text,
+            (1 - mouseDistance / 150) * 0.25
+          );
           this.context.lineWidth = 0.9;
           this.context.stroke();
         }
