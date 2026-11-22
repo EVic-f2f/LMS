@@ -1,8 +1,8 @@
 const VicTheme = {
   async load() {
     try {
-      const response = await fetch('/api/vic-theme');
-      if (!response.ok) return;
+      const response = await fetch('/api/vic-theme', { cache: 'no-store' });
+      if (!response.ok) throw new Error(`Request failed (${response.status}).`);
       this.apply(await response.json());
     } catch (error) {
       console.warn('VIC theme could not be loaded:', error.message);

@@ -12,12 +12,12 @@ const UI = {
     this.currentTab = normalizedTabName;
 
     if (normalizedTabName === "Settings" && !Auth.isTeacherOrHigher()) {
-      alert("Only teachers and administrators can access Settings.");
+      AppDialogs.alert("Only teachers and administrators can access Settings.");
       return;
     }
 
     if (normalizedTabName === "HD" && !Auth.isSchoolAdministrator()) {
-      alert("Only school administrators can access HD.");
+      AppDialogs.alert("Only school administrators can access HD.");
       return;
     }
 
@@ -122,10 +122,10 @@ const UI = {
     }
   },
 
-  setMaxScorePrompt() {
+  async setMaxScorePrompt() {
     if (this.selectedColumn > 0) {
       const field = Table.gradeFields[this.selectedColumn - 1];
-      Validation.setMaxScore(this.selectedColumn, field);
+      await Validation.setMaxScore(this.selectedColumn, field);
     }
     this.hideContextMenu();
   },

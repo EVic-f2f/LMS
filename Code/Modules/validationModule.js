@@ -29,8 +29,12 @@ const Validation = {
     }
   },
 
-  setMaxScore(columnIndex, field) {
-    const max = prompt(`Enter max score for ${field}:`);
+  async setMaxScore(columnIndex, field) {
+    const max = await AppDialogs.prompt(`Enter max score for ${field}:`, {
+      title: 'Set maximum score',
+      inputLabel: 'Maximum score',
+      placeholder: 'For example, 100'
+    });
     const numMax = parseFloat(max);
     if (!isNaN(numMax) && numMax > 0) {
       this.maxScores[field] = numMax;

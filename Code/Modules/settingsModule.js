@@ -384,7 +384,7 @@ const Settings = {
 
 
       if (!email) {
-        alert("✗ No signed-in user found. Please sign in again.");
+        AppDialogs.alert("No signed-in user found. Please sign in again.");
         return;
       }
 

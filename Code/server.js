@@ -28,6 +28,14 @@ const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBL
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const SUPABASE_STORAGE_BUCKET = process.env.SUPABASE_STORAGE_BUCKET || "classwork-files";
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
+const MAX_SCHOOL_UPDATE_IMAGE_BYTES = 10 * 1024 * 1024;
+const SCHOOL_UPDATE_IMAGE_TYPES = new Map([
+    ["image/avif", "avif"],
+    ["image/gif", "gif"],
+    ["image/jpeg", "jpg"],
+    ["image/png", "png"],
+    ["image/webp", "webp"]
+]);
 
 
 function getSupabaseClientOrNull() {
@@ -49,9 +57,24 @@ function requireSupabase() {
   return supabase;
 }
 
-function getVicTheme() {
+function getLocalVicTheme() {
     if (!fs.existsSync(vicThemePath)) return {};
     return JSON.parse(fs.readFileSync(vicThemePath, "utf8"));
+}
+
+async function getVicTheme() {
+    if (!supabase) return getLocalVicTheme();
+    const { data, error } = await supabase
+        .from("global_settings")
+        .select("value")
+        .eq("key", "vic_theme")
+        .maybeSingle();
+    if (error) throw error;
+    if (!data) return getLocalVicTheme();
+    if (!data.value || typeof data.value !== "object" || Array.isArray(data.value)) {
+        throw new Error("Stored VIC theme is invalid.");
+    }
+    return data.value;
 }
 
 async function requireAdministrator(req) {
@@ -563,6 +586,54 @@ async function getStorageScope(req) {
         prefix: `schools/${schoolId}/classes/${classId}`,
         canWrite: ownsClass || isAdministrator
     };
+}
+
+function validateSchoolUpdateImagePath(value, schoolId) {
+    if (value === null || value === undefined || String(value).trim() === "") return null;
+    const imagePath = String(value || "").trim();
+    const prefix = `schools/${schoolId}/announcements/`;
+    const filename = imagePath.startsWith(prefix) ? imagePath.slice(prefix.length) : "";
+    if (!filename || filename.includes("/") || filename.includes("\\") || filename.includes("..") || imagePath.length > 500) {
+        throw httpError("A valid image for this school is required.", 400);
+    }
+    return imagePath;
+}
+
+function hasValidSchoolUpdateImageSignature(buffer, contentType) {
+    if (contentType === "image/jpeg") {
+        return buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
+    }
+    if (contentType === "image/png") {
+        return buffer.length >= 8 && buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+    }
+    if (contentType === "image/gif") {
+        return buffer.length >= 6 && ["GIF87a", "GIF89a"].includes(buffer.toString("ascii", 0, 6));
+    }
+    if (contentType === "image/webp") {
+        return buffer.length >= 12 && buffer.toString("ascii", 0, 4) === "RIFF" && buffer.toString("ascii", 8, 12) === "WEBP";
+    }
+    if (contentType === "image/avif") {
+        const brand = buffer.toString("ascii", 8, 12);
+        return buffer.length >= 12 && buffer.toString("ascii", 4, 8) === "ftyp" && ["avif", "avis"].includes(brand);
+    }
+    return false;
+}
+
+async function requireSchoolUpdateAdministrator(user, schoolId) {
+    if (String(user.status) !== "School Administrator") {
+        throw httpError("Only school administrators can manage school updates.", 403);
+    }
+    const { data: membership, error } = await supabase
+        .from("school_memberships")
+        .select("role")
+        .eq("user_id", user.id)
+        .eq("school_id", schoolId)
+        .eq("status", "active")
+        .maybeSingle();
+    if (error) throw error;
+    if (String(membership?.role || "") !== "school_admin") {
+        throw httpError("School administrator membership is required to manage updates.", 403);
+    }
 }
 
 function readRequestBuffer(req, maxBytes) {
@@ -1208,11 +1279,10 @@ function handleRequest(req, res) {
     if (url.pathname === "/api/vic-theme") {
         setCorsHeaders(res);
         if (req.method === "GET") {
-            try {
-                sendJson(res, 200, getVicTheme());
-            } catch (err) {
-                sendJson(res, err.statusCode || 500, { success: false, error: err.message });
-            }
+            res.setHeader("Cache-Control", "no-store");
+            getVicTheme()
+                .then((theme) => sendJson(res, 200, theme))
+                .catch((err) => sendJson(res, err.statusCode || 500, { success: false, error: err.message }));
             return;
         }
         sendJson(res, 405, { error: "Method not allowed" });
@@ -1240,7 +1310,14 @@ function handleRequest(req, res) {
                     theme[key] = payload.theme[key].trim();
                 }
             });
-            fs.writeFileSync(vicThemePath, JSON.stringify(theme, null, 2));
+            const { error } = await requireSupabase()
+                .from("global_settings")
+                .upsert({
+                    key: "vic_theme",
+                    value: theme,
+                    updated_at: new Date().toISOString()
+                }, { onConflict: "key" });
+            if (error) throw error;
             sendJson(res, 200, { success: true, theme });
         })().catch((error) => {
             sendJson(res, error.statusCode || 500, { success: false, error: error.message });
@@ -1834,7 +1911,7 @@ function handleRequest(req, res) {
                 const schoolId = await getAuthorizedSchoolId(req, user, url.searchParams.get("schoolId"));
                 const { data, error } = await supabase
                     .from("school_announcements")
-                    .select("id, school_id, title, category, content, created_by, created_at, updated_at")
+                    .select("id, school_id, title, category, content, image_path, created_by, created_at, updated_at")
                     .eq("school_id", schoolId)
                     .order("created_at", { ascending: false })
                     .limit(6);
@@ -1844,23 +1921,9 @@ function handleRequest(req, res) {
             }
 
             if (req.method !== "POST") throw httpError("Method not allowed.", 405);
-            if (String(user.status) !== "School Administrator") {
-                throw httpError("Only school administrators can manage school updates.", 403);
-            }
-
             const payload = await readJsonBody(req);
             const schoolId = await getAuthorizedSchoolId(req, user, payload.schoolId);
-            const { data: membership, error: membershipError } = await supabase
-                .from("school_memberships")
-                .select("role")
-                .eq("user_id", user.id)
-                .eq("school_id", schoolId)
-                .eq("status", "active")
-                .maybeSingle();
-            if (membershipError) throw membershipError;
-            if (String(membership?.role || "") !== "school_admin") {
-                throw httpError("School administrator membership is required to manage updates.", 403);
-            }
+            await requireSchoolUpdateAdministrator(user, schoolId);
 
             const action = String(payload.action || "create").toLowerCase();
             if (action === "delete") {
@@ -1870,11 +1933,11 @@ function handleRequest(req, res) {
                     .delete()
                     .eq("id", payload.id)
                     .eq("school_id", schoolId)
-                    .select("id")
+                    .select("id, image_path")
                     .maybeSingle();
                 if (error) throw error;
                 if (!data) throw httpError("School update not found.", 404);
-                sendJson(res, 200, { success: true });
+                sendJson(res, 200, { success: true, imagePath: data.image_path || null });
                 return;
             }
 
@@ -1890,6 +1953,10 @@ function handleRequest(req, res) {
             if (!["news", "announcement", "event", "alert"].includes(category)) {
                 throw httpError("Choose a valid update category.", 400);
             }
+            const hasImagePath = Object.prototype.hasOwnProperty.call(payload, "imagePath");
+            const imagePath = hasImagePath
+                ? validateSchoolUpdateImagePath(payload.imagePath, schoolId)
+                : null;
 
             const values = {
                 title,
@@ -1897,6 +1964,7 @@ function handleRequest(req, res) {
                 category,
                 updated_at: new Date().toISOString()
             };
+            if (hasImagePath) values.image_path = imagePath;
             if (action === "update") {
                 if (!isUuid(payload.id)) throw httpError("A valid update id is required.", 400);
                 const { data, error } = await supabase
@@ -1904,7 +1972,7 @@ function handleRequest(req, res) {
                     .update(values)
                     .eq("id", payload.id)
                     .eq("school_id", schoolId)
-                    .select("id, school_id, title, category, content, created_by, created_at, updated_at")
+                    .select("id, school_id, title, category, content, image_path, created_by, created_at, updated_at")
                     .maybeSingle();
                 if (error) throw error;
                 if (!data) throw httpError("School update not found.", 404);
@@ -1915,11 +1983,89 @@ function handleRequest(req, res) {
 
             const { data, error } = await supabase
                 .from("school_announcements")
-                .insert({ ...values, school_id: schoolId, created_by: user.id })
-                .select("id, school_id, title, category, content, created_by, created_at, updated_at")
+                .insert({ ...values, image_path: imagePath, school_id: schoolId, created_by: user.id })
+                .select("id, school_id, title, category, content, image_path, created_by, created_at, updated_at")
                 .single();
             if (error) throw error;
             sendJson(res, 201, { success: true, announcement: data });
+        })().catch((error) => {
+            sendJson(res, error.statusCode || 500, { success: false, error: error.message });
+        });
+        return;
+    }
+
+    if (url.pathname === "/api/schools/announcements/images") {
+        setCorsHeaders(res);
+        if (req.method === "OPTIONS") {
+            res.writeHead(204);
+            res.end();
+            return;
+        }
+        if (!["GET", "POST", "DELETE"].includes(req.method)) {
+            sendJson(res, 405, { success: false, error: "Method not allowed." });
+            return;
+        }
+
+        (async () => {
+            requireSupabase();
+            if (!SUPABASE_SERVICE_ROLE_KEY) {
+                throw httpError("School update images require SUPABASE_SERVICE_ROLE_KEY.", 503);
+            }
+            const user = await getAuthenticatedUser(req);
+
+            if (req.method === "GET") {
+                const schoolId = await getAuthorizedSchoolId(req, user, url.searchParams.get("schoolId"));
+                const imagePath = validateSchoolUpdateImagePath(url.searchParams.get("path"), schoolId);
+                if (!imagePath) throw httpError("An image path is required.", 400);
+                const { data, error } = await supabase.storage.from(SUPABASE_STORAGE_BUCKET).download(imagePath);
+                if (error) throw error;
+                const contentType = String(data.type || "").toLowerCase();
+                if (!SCHOOL_UPDATE_IMAGE_TYPES.has(contentType)) {
+                    throw httpError("The stored file is not a supported school update image.", 415);
+                }
+                const buffer = Buffer.from(await data.arrayBuffer());
+                res.writeHead(200, {
+                    "Content-Type": contentType,
+                    "Content-Length": buffer.length,
+                    "Content-Disposition": `inline; filename="${path.basename(imagePath)}"`,
+                    "Cache-Control": "private, no-store",
+                    "X-Content-Type-Options": "nosniff"
+                });
+                res.end(buffer);
+                return;
+            }
+
+            const payload = req.method === "DELETE" ? await readJsonBody(req) : null;
+            const schoolId = await getAuthorizedSchoolId(
+                req,
+                user,
+                payload?.schoolId || req.headers["x-school-id"]
+            );
+            await requireSchoolUpdateAdministrator(user, schoolId);
+            const bucket = supabase.storage.from(SUPABASE_STORAGE_BUCKET);
+
+            if (req.method === "POST") {
+                const contentType = String(req.headers["content-type"] || "").split(";")[0].trim().toLowerCase();
+                const extension = SCHOOL_UPDATE_IMAGE_TYPES.get(contentType);
+                if (!extension) throw httpError("Choose a JPEG, PNG, GIF, WebP, or AVIF image.", 415);
+                const buffer = await readRequestBuffer(req, MAX_SCHOOL_UPDATE_IMAGE_BYTES);
+                if (!buffer.length) throw httpError("The selected image is empty.", 400);
+                if (!hasValidSchoolUpdateImageSignature(buffer, contentType)) {
+                    throw httpError("The uploaded file does not match its image type.", 400);
+                }
+
+                const imagePath = `schools/${schoolId}/announcements/${crypto.randomUUID()}.${extension}`;
+                const { error } = await bucket.upload(imagePath, buffer, { contentType, upsert: false });
+                if (error) throw error;
+                sendJson(res, 201, { success: true, imagePath });
+                return;
+            }
+
+            const imagePath = validateSchoolUpdateImagePath(payload.imagePath, schoolId);
+            if (!imagePath) throw httpError("An image path is required.", 400);
+            const { error } = await bucket.remove([imagePath]);
+            if (error) throw error;
+            sendJson(res, 200, { success: true });
         })().catch((error) => {
             sendJson(res, error.statusCode || 500, { success: false, error: error.message });
         });

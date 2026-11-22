@@ -467,7 +467,7 @@ const App = {
 
   async save() {
     if (!Auth.isTeacherOrHigher(this.currentAccount)) {
-      alert("Only teachers and administrators can save grades.");
+      AppDialogs.alert("Only teachers and administrators can save grades.");
       return;
     }
 
@@ -484,19 +484,23 @@ const App = {
 
   addStudent() {
     if (!Auth.isTeacherOrHigher(this.currentAccount)) {
-      alert("Only teachers and administrators can add student grades.");
+      AppDialogs.alert("Only teachers and administrators can add student grades.");
       return;
     }
     Table.addRow();
   },
 
-  clearAllData() {
+  async clearAllData() {
     if (!Auth.isTeacherOrHigher(this.currentAccount)) {
-      alert("Only teachers and administrators can clear grade data.");
+      AppDialogs.alert("Only teachers and administrators can clear grade data.");
       return;
     }
 
-    if (confirm("Are you sure you want to clear all student data? This cannot be undone.")) {
+    if (await AppDialogs.confirm("Are you sure you want to clear all student data? This cannot be undone.", {
+      title: "Clear student data",
+      confirmText: "Clear data",
+      danger: true
+    })) {
       Storage.clear();
       Validation.maxScores = {};
       Table.buildStudentTable([]);

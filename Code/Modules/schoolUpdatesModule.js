@@ -1,18 +1,23 @@
 const SchoolUpdates = {
+  imageUrls: new Set(),
+  loadRequestId: 0,
+
   async load() {
     const list = document.getElementById("school-updates-list");
     const editor = document.getElementById("school-updates-editor");
     const user = Auth.getCurrentUser();
     if (!list || !editor || !user) return;
 
+    const requestId = ++this.loadRequestId;
     const canManage = user.status === "School Administrator";
+    const schoolId = App.currentSchoolId || user.school_id;
+    this.clearImageUrls();
     this.renderEditor(editor, canManage);
     list.textContent = "Loading school updates…";
 
     try {
       const token = localStorage.getItem(Auth.SESSION_KEY);
       if (!token) throw new Error("Sign in to view school updates.");
-      const schoolId = App.currentSchoolId || user.school_id;
       const query = schoolId ? `?schoolId=${encodeURIComponent(schoolId)}` : "";
       const response = await fetch(`/api/schools/announcements${query}`, {
         headers: { Authorization: `Bearer ${token}` }
@@ -22,13 +27,18 @@ const SchoolUpdates = {
         throw new Error(result.error || "Could not load school updates.");
       }
 
-      this.renderAnnouncements(list, result.announcements || [], canManage);
+      if (requestId !== this.loadRequestId) return;
+      const announcements = result.announcements || [];
+      this.renderAnnouncements(list, announcements, canManage);
+      await this.loadAnnouncementImages(list, schoolId, requestId);
     } catch (error) {
-      list.textContent = error.message || "Could not load school updates.";
+      if (requestId === this.loadRequestId) list.textContent = error.message || "Could not load school updates.";
     }
   },
 
   renderEditor(container, canManage) {
+    const existingForm = container.querySelector(".school-update-form");
+    if (existingForm) this.clearEditorPreview(existingForm);
     container.replaceChildren();
     if (!canManage) return;
 
@@ -52,6 +62,20 @@ const SchoolUpdates = {
         <span>Update</span>
         <textarea name="content" rows="3" maxlength="4000" required></textarea>
       </label>
+      <div class="school-update-image-field">
+        <label>
+          <span>Image (optional)</span>
+          <input name="image" type="file" accept="image/jpeg,image/png,image/gif,image/webp,image/avif">
+        </label>
+        <div class="school-update-image-preview" data-image-preview hidden>
+          <img alt="Selected school update image">
+          <span data-image-preview-label></span>
+        </div>
+        <label class="school-update-remove-image" data-remove-image-wrap hidden>
+          <input name="removeImage" type="checkbox">
+          <span>Remove the current image</span>
+        </label>
+      </div>
       <div class="school-update-form-actions">
         <p class="school-update-status" role="status" aria-live="polite"></p>
         <button class="app-primary-button" type="submit">Publish update</button>
@@ -60,6 +84,11 @@ const SchoolUpdates = {
     `;
     form.addEventListener("submit", (event) => this.save(event, form));
     form.querySelector("[data-cancel-edit]").addEventListener("click", () => this.resetEditor(form));
+    form.elements.image.addEventListener("change", () => this.previewSelectedImage(form));
+    form.elements.removeImage.addEventListener("change", () => {
+      if (form.elements.removeImage.checked) this.clearEditorPreview(form);
+      else if (form.dataset.editingImagePath) this.loadEditorImage(form, form.dataset.editingImagePath);
+    });
     container.appendChild(form);
   },
 
@@ -99,7 +128,16 @@ const SchoolUpdates = {
       title.textContent = announcement.title;
       const content = document.createElement("p");
       content.textContent = announcement.content;
-      card.append(heading, title, content);
+      card.append(heading);
+      if (announcement.image_path) {
+        const imageSlot = document.createElement("div");
+        imageSlot.className = "school-update-image-slot";
+        imageSlot.dataset.imagePath = announcement.image_path;
+        imageSlot.dataset.imageTitle = announcement.title;
+        imageSlot.textContent = "Loading image…";
+        card.appendChild(imageSlot);
+      }
+      card.append(title, content);
 
       if (canManage) {
         const actions = document.createElement("div");
@@ -121,6 +159,155 @@ const SchoolUpdates = {
     });
   },
 
+  clearImageUrls() {
+    this.imageUrls.forEach((url) => URL.revokeObjectURL(url));
+    this.imageUrls.clear();
+  },
+
+  async loadAnnouncementImages(container, schoolId, requestId) {
+    const slots = Array.from(container.querySelectorAll(".school-update-image-slot"));
+    await Promise.all(slots.map(async (slot) => {
+      try {
+        const blob = await this.getAnnouncementImage(slot.dataset.imagePath, schoolId);
+        const url = URL.createObjectURL(blob);
+        if (!slot.isConnected || requestId !== this.loadRequestId) {
+          URL.revokeObjectURL(url);
+          return;
+        }
+        const image = document.createElement("img");
+        image.className = "school-update-image";
+        image.src = url;
+        image.alt = slot.dataset.imageTitle ? `Image for ${slot.dataset.imageTitle}` : "School update image";
+        slot.replaceWith(image);
+        this.imageUrls.add(url);
+      } catch (error) {
+        if (!slot.isConnected || requestId !== this.loadRequestId) return;
+        slot.classList.add("is-error");
+        slot.textContent = "Image unavailable.";
+        console.warn("Could not load a school update image:", error.message);
+      }
+    }));
+  },
+
+  async getAnnouncementImage(imagePath, schoolId) {
+    const token = localStorage.getItem(Auth.SESSION_KEY);
+    if (!token) throw new Error("Sign in again to view school update images.");
+    const query = new URLSearchParams({ path: imagePath, schoolId: String(schoolId || "") });
+    const response = await fetch(`/api/schools/announcements/images?${query}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "X-School-Id": schoolId || ""
+      }
+    });
+    if (!response.ok) {
+      const result = await response.json().catch(() => ({}));
+      throw new Error(result.error || "Could not load this school update image.");
+    }
+    return response.blob();
+  },
+
+  async uploadAnnouncementImage(file, schoolId) {
+    const token = localStorage.getItem(Auth.SESSION_KEY);
+    if (!token) throw new Error("Sign in again to upload an image.");
+    const response = await fetch("/api/schools/announcements/images", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": file.type,
+        "X-School-Id": schoolId
+      },
+      body: file
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result.success) {
+      throw new Error(result.error || "Could not upload this image.");
+    }
+    return result.imagePath;
+  },
+
+  async deleteAnnouncementImage(imagePath, schoolId) {
+    if (!imagePath) return;
+    const token = localStorage.getItem(Auth.SESSION_KEY);
+    if (!token) throw new Error("Sign in again to remove this image.");
+    const response = await fetch("/api/schools/announcements/images", {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+        "X-School-Id": schoolId
+      },
+      body: JSON.stringify({ imagePath, schoolId })
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result.success) {
+      throw new Error(result.error || "Could not remove the previous image.");
+    }
+  },
+
+  clearEditorPreview(form) {
+    if (form.dataset.previewObjectUrl) URL.revokeObjectURL(form.dataset.previewObjectUrl);
+    delete form.dataset.previewObjectUrl;
+    const preview = form.querySelector("[data-image-preview]");
+    if (preview) {
+      preview.hidden = true;
+      preview.querySelector("img").removeAttribute("src");
+      preview.querySelector("[data-image-preview-label]").textContent = "";
+    }
+  },
+
+  previewSelectedImage(form) {
+    const file = form.elements.image.files?.[0];
+    const status = form.querySelector(".school-update-status");
+    const allowedTypes = ["image/jpeg", "image/png", "image/gif", "image/webp", "image/avif"];
+    if (!file) {
+      if (form.dataset.editingImagePath && !form.elements.removeImage.checked) {
+        this.loadEditorImage(form, form.dataset.editingImagePath);
+      } else {
+        this.clearEditorPreview(form);
+      }
+      return;
+    }
+    if (!allowedTypes.includes(file.type) || file.size > 10 * 1024 * 1024) {
+      this.clearEditorPreview(form);
+      status.textContent = "Choose a JPEG, PNG, GIF, WebP, or AVIF image up to 10 MB.";
+      form.elements.image.value = "";
+      if (form.dataset.editingImagePath && !form.elements.removeImage.checked) {
+        this.loadEditorImage(form, form.dataset.editingImagePath);
+      }
+      return;
+    }
+
+    this.clearEditorPreview(form);
+    form.elements.removeImage.checked = false;
+    form.querySelector("[data-remove-image-wrap]").hidden = true;
+    const url = URL.createObjectURL(file);
+    form.dataset.previewObjectUrl = url;
+    const preview = form.querySelector("[data-image-preview]");
+    preview.querySelector("img").src = url;
+    preview.querySelector("[data-image-preview-label]").textContent = file.name;
+    preview.hidden = false;
+    status.textContent = "";
+  },
+
+  async loadEditorImage(form, imagePath) {
+    this.clearEditorPreview(form);
+    const schoolId = App.currentSchoolId || Auth.getCurrentUser()?.school_id;
+    try {
+      const blob = await this.getAnnouncementImage(imagePath, schoolId);
+      if (!form.isConnected || form.dataset.editingImagePath !== imagePath || form.elements.image.files?.length) return;
+      const url = URL.createObjectURL(blob);
+      form.dataset.previewObjectUrl = url;
+      const preview = form.querySelector("[data-image-preview]");
+      preview.querySelector("img").src = url;
+      preview.querySelector("[data-image-preview-label]").textContent = "Current image";
+      preview.hidden = false;
+      form.querySelector("[data-remove-image-wrap]").hidden = false;
+    } catch (error) {
+      const status = form.querySelector(".school-update-status");
+      if (status) status.textContent = error.message || "Could not load the current image.";
+    }
+  },
+
   async save(event, form) {
     event.preventDefault();
     const status = form.querySelector(".school-update-status");
@@ -128,47 +315,101 @@ const SchoolUpdates = {
     const data = new FormData(form);
     const id = form.dataset.editingId;
     const schoolId = App.currentSchoolId || Auth.getCurrentUser()?.school_id;
+    const oldImagePath = form.dataset.editingImagePath || null;
+    const selectedImage = data.get("image");
+    let imagePath = form.elements.removeImage.checked ? null : oldImagePath;
+    let uploadedImagePath = null;
     submit.disabled = true;
     status.textContent = "Saving…";
 
     try {
+      if (selectedImage instanceof File && selectedImage.size > 0) {
+        if (selectedImage.size > 10 * 1024 * 1024) {
+          throw new Error("School update images must be 10 MB or smaller.");
+        }
+        uploadedImagePath = await this.uploadAnnouncementImage(selectedImage, schoolId);
+        imagePath = uploadedImagePath;
+      }
       await this.write({
         action: id ? "update" : "create",
         ...(id ? { id } : {}),
         schoolId,
         category: data.get("category"),
         title: data.get("title"),
-        content: data.get("content")
+        content: data.get("content"),
+        imagePath
       });
-      await this.load();
     } catch (error) {
-      status.textContent = error.message || "Could not save this update.";
+      let cleanupMessage = "";
+      if (uploadedImagePath) {
+        try {
+          await this.deleteAnnouncementImage(uploadedImagePath, schoolId);
+        } catch (cleanupError) {
+          console.error("Could not remove an unused school update image:", cleanupError);
+          cleanupMessage = ` The uploaded image also could not be removed: ${cleanupError.message}`;
+        }
+      }
+      status.textContent = `${error.message || "Could not save this update."}${cleanupMessage}`;
       submit.disabled = false;
+      return;
+    }
+
+    let cleanupWarning = "";
+    if (oldImagePath && oldImagePath !== imagePath) {
+      try {
+        await this.deleteAnnouncementImage(oldImagePath, schoolId);
+      } catch (error) {
+        console.error("The update was saved, but its previous image could not be removed:", error);
+        cleanupWarning = `Update saved, but the previous image could not be removed: ${error.message}`;
+      }
+    }
+    await this.load();
+    if (cleanupWarning) {
+      const currentStatus = document.querySelector(".school-update-status");
+      if (currentStatus) currentStatus.textContent = cleanupWarning;
     }
   },
 
   editAnnouncement(announcement) {
     const form = document.querySelector(".school-update-form");
     if (!form) return;
+    this.clearEditorPreview(form);
     form.dataset.editingId = announcement.id;
+    form.dataset.editingImagePath = announcement.image_path || "";
     form.elements.category.value = announcement.category;
     form.elements.title.value = announcement.title;
     form.elements.content.value = announcement.content;
+    form.elements.removeImage.checked = false;
+    form.querySelector("[data-remove-image-wrap]").hidden = !announcement.image_path;
     form.querySelector('[type="submit"]').textContent = "Save update";
     form.querySelector("[data-cancel-edit]").hidden = false;
+    if (announcement.image_path) this.loadEditorImage(form, announcement.image_path);
     form.scrollIntoView({ behavior: "smooth", block: "nearest" });
     form.elements.title.focus();
   },
 
   async deleteAnnouncement(id) {
-    if (!confirm("Delete this school update? This cannot be undone.")) return;
+    if (!await AppDialogs.confirm("Delete this school update? This cannot be undone.", {
+      title: "Delete school update",
+      confirmText: "Delete update",
+      danger: true
+    })) return;
     try {
-      await this.write({
+      const schoolId = App.currentSchoolId || Auth.getCurrentUser()?.school_id;
+      const result = await this.write({
         action: "delete",
         id,
-        schoolId: App.currentSchoolId || Auth.getCurrentUser()?.school_id
+        schoolId
       });
       await this.load();
+      if (result.imagePath) {
+        try {
+          await this.deleteAnnouncementImage(result.imagePath, schoolId);
+        } catch (error) {
+          const status = document.querySelector(".school-update-status");
+          if (status) status.textContent = `Update deleted, but its image could not be removed: ${error.message}`;
+        }
+      }
     } catch (error) {
       const status = document.querySelector(".school-update-status");
       if (status) status.textContent = error.message || "Could not delete this update.";
@@ -194,10 +435,13 @@ const SchoolUpdates = {
   },
 
   resetEditor(form) {
+    this.clearEditorPreview(form);
     form.reset();
     delete form.dataset.editingId;
+    delete form.dataset.editingImagePath;
     form.querySelector('[type="submit"]').textContent = "Publish update";
     form.querySelector("[data-cancel-edit]").hidden = true;
+    form.querySelector("[data-remove-image-wrap]").hidden = true;
     form.querySelector(".school-update-status").textContent = "";
   },
 

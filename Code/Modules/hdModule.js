@@ -247,41 +247,45 @@ const HD = {
 
   async changeRole(email, role, currentUser) {
     if (!["Administrator", "Admin"].includes(currentUser.status)) {
-      alert('Only global administrators may change account roles.');
+      await AppDialogs.alert('Only global administrators may change account roles.');
       return;
     }
 
     try {
       await this.adminRequest('/api/admin/users/update', { email, status: role });
-      alert(`Role for ${email} updated to ${role}.`);
+      await AppDialogs.alert(`Role for ${email} updated to ${role}.`, { title: 'Role updated' });
       await this.render();
     } catch (error) {
-      alert(error.message);
+      await AppDialogs.alert(error.message, { title: 'Could not update role', danger: true });
       await this.render();
     }
   },
 
   async deleteUser(email, currentUser) {
     if (!["Administrator", "Admin"].includes(currentUser.status)) {
-      alert('Only Web Administrators may delete accounts.');
+      await AppDialogs.alert('Only Web Administrators may delete accounts.');
       return;
     }
 
     if (email === currentUser.email) {
-      alert('You cannot delete your own administrator account from here.');
+      await AppDialogs.alert('You cannot delete your own administrator account from here.');
       return;
     }
 
-    if (!confirm(`Delete account ${email}? This cannot be undone.`)) {
+    if (!await AppDialogs.confirm(`Delete account ${email}? This cannot be undone.`, {
+      title: 'Delete user account',
+      confirmText: 'Delete account',
+      danger: true
+    })) {
       return;
     }
 
     try {
       await this.adminRequest('/api/admin/users/delete', { email });
-      alert(`Account ${email} has been deleted.`);
+      await AppDialogs.alert(`Account ${email} has been deleted.`, { title: 'Account deleted' });
       await this.render();
     } catch (error) {
-      alert(error.message);
+      await AppDialogs.alert(error.message, { title: 'Could not delete account', danger: true });
     }
   },
 

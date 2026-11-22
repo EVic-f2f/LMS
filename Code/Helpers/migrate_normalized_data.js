@@ -315,7 +315,10 @@ async function migrate() {
       failIfError(await supabase.from('files').upsert(storedFiles, { onConflict: 'id' }), 'Writing files');
     }
     const vicTheme = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'vic-theme.json'), 'utf8'));
-    failIfError(await supabase.from('global_settings').upsert({ key: 'vic_theme', value: vicTheme }, { onConflict: 'key' }), 'Writing global settings');
+    failIfError(await supabase.from('global_settings').upsert(
+      { key: 'vic_theme', value: vicTheme },
+      { onConflict: 'key', ignoreDuplicates: true }
+    ), 'Writing global settings');
 
     if (joinRequests.length) {
       for (const request of joinRequests) {

@@ -145,7 +145,11 @@
       const removeButton = createButton('Remove');
       removeButton.disabled = isCurrentAdmin;
       removeButton.addEventListener('click', async () => {
-        if (!window.confirm(`Remove ${user.email}? This cannot be undone.`)) return;
+        const confirmed = await AppDialogs.confirm(
+          `Remove ${user.email}? This cannot be undone.`,
+          { title: 'Remove user account', confirmText: 'Remove account', danger: true }
+        );
+        if (!confirmed) return;
         removeButton.disabled = true;
         try {
           await request('/api/admin/users/delete', {
@@ -301,19 +305,23 @@
 
   async function deleteSchool() {
     if (!selectedSchool) return;
-    const confirmedName = window.prompt(`Permanently delete "${selectedSchool.name}"?\nType the school name to confirm.`);
-    if (confirmedName === null) return;
-    if (confirmedName.trim() !== selectedSchool.name.trim()) {
-      setStatus('School name did not match; nothing was deleted.', true);
-      return;
-    }
+    const confirmed = await AppDialogs.confirm(
+      `Permanently delete "${selectedSchool.name}"? This cannot be undone.`,
+      {
+        title: 'Delete this school',
+        confirmText: 'Delete school',
+        danger: true,
+        confirmationText: selectedSchool.name.trim()
+      }
+    );
+    if (!confirmed) return;
 
     const deleteButton = document.getElementById('delete-school');
     deleteButton.disabled = true;
     try {
       await request('/api/admin/schools/delete', {
         method: 'POST',
-        body: JSON.stringify({ schoolId: selectedSchool.id, confirmName: confirmedName.trim() })
+        body: JSON.stringify({ schoolId: selectedSchool.id, confirmName: selectedSchool.name.trim() })
       });
       const deletedName = selectedSchool.name;
       selectedSchool = null;

@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS public.school_announcements (
     category text NOT NULL DEFAULT 'news'
         CHECK (category IN ('news', 'announcement', 'event', 'alert')),
     content text NOT NULL CHECK (char_length(btrim(content)) BETWEEN 1 AND 4000),
+    image_path text,
     created_by uuid REFERENCES public.users(id) ON DELETE SET NULL,
     created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now()

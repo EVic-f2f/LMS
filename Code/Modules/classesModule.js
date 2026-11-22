@@ -54,7 +54,7 @@ const Classes = {
 
   ensureTeacherAccess(user) {
     if (!Auth.isTeacherOrHigher(user)) {
-      alert("Only teachers and administrators can perform this action.");
+      AppDialogs.alert("Only teachers and administrators can perform this action.");
       return false;
     }
     return true;
@@ -95,86 +95,123 @@ const Classes = {
   async renderStudentView(content, user, classes) {
     const enrolledClasses = classes.filter((classInfo) => classInfo.isEnrolled);
     const availableClasses = classes.filter((classInfo) => !classInfo.isEnrolled);
-    const enrolledClassesHtml = enrolledClasses.length
-      ? enrolledClasses.map((classInfo) => `
-          <div class="class-card themed-panel">
-            <div><strong>${this.escapeHtml(classInfo.name)}</strong></div>
-            <div class="muted" style="display:flex; flex-wrap:wrap; gap:12px; font-size:0.95em;">
-              <span><strong>Teacher:</strong> ${this.escapeHtml(classInfo.teacher?.name || 'Unknown')}</span>
-              <span><strong>Class ID:</strong> ${this.escapeHtml(classInfo.id)}</span>
-              <span><strong>Students:</strong> ${classInfo.studentCount}</span>
-            </div>
-            <div class="class-actions">
-              <button onclick="Classes.openClassDetail('${this.escapeHtml(classInfo.id)}')" class="btn-primary">Open Class</button>
-            </div>
-          </div>
-        `).join('')
-      : '<p>You are not enrolled in any classes yet.</p>';
-    const availableClassesHtml = availableClasses.length
-      ? availableClasses.map((classInfo) => {
-          const buttonText = classInfo.hasPendingRequest ? 'Request Pending' : 'Request to Join';
-          return `
-            <div class="class-card themed-panel">
-              <div><strong>${this.escapeHtml(classInfo.name)}</strong> (${this.escapeHtml(classInfo.subject)})</div>
-              <div class="muted"><strong>Teacher:</strong> ${this.escapeHtml(classInfo.teacher?.name || 'Unknown')}</div>
-              <button onclick="Classes.requestJoinClass('${this.escapeHtml(classInfo.id)}')" class="${classInfo.hasPendingRequest ? 'btn-secondary' : 'btn-primary'}" ${classInfo.hasPendingRequest ? 'disabled' : ''}>
-                ${buttonText}
-              </button>
-            </div>
-          `;
-        }).join('')
-      : '<p>No other classes are available.</p>';
+    const renderCard = (classInfo, enrolled) => `
+      <article class="classes-card">
+        <div class="classes-card-heading">
+          <span class="classes-card-icon icon-mask icon-classes" aria-hidden="true"></span>
+          <span class="classes-subject">${this.escapeHtml(classInfo.subject || 'Class')}</span>
+        </div>
+        <h4>${this.escapeHtml(classInfo.name)}</h4>
+        <p class="classes-card-teacher">Teacher <strong>${this.escapeHtml(classInfo.teacher?.name || 'Unknown')}</strong></p>
+        <div class="classes-card-meta">
+          <span><strong>${Number(classInfo.studentCount) || 0}</strong> students</span>
+          ${enrolled ? `<span class="classes-id">ID ${this.escapeHtml(classInfo.id)}</span>` : ''}
+        </div>
+        ${enrolled
+          ? `<button type="button" class="app-primary-button" onclick="Classes.openClassDetail('${this.escapeHtml(classInfo.id)}')">Open class</button>`
+          : `<button type="button" class="app-secondary-button" onclick="Classes.requestJoinClass('${this.escapeHtml(classInfo.id)}')" ${classInfo.hasPendingRequest ? 'disabled' : ''}>${classInfo.hasPendingRequest ? 'Request pending' : 'Request to join'}</button>`}
+      </article>
+    `;
 
     content.innerHTML = `
-      <div style="margin-bottom:20px;">
-        <h4>My Classes</h4>
-        <div id="student-classes-list">${enrolledClassesHtml}</div>
-      </div>
-      <div>
-        <h4>Find a Class</h4>
-        <div id="available-classes">${availableClassesHtml}</div>
+      <div class="classes-page">
+        <section class="classes-hero">
+          <div>
+            <div class="section-eyebrow">LEARNING SPACE</div>
+            <h2>Welcome, ${this.escapeHtml(user.name || 'student')}</h2>
+            <p>Your classes, grades, and shared learning resources in one place.</p>
+          </div>
+          <span class="classes-hero-mark icon-mask icon-classes" aria-hidden="true"></span>
+        </section>
+        <div class="classes-summary">
+          <article><span>ENROLLED</span><strong>${enrolledClasses.length}</strong><small>Classes you can open</small></article>
+          <article><span>AVAILABLE</span><strong>${availableClasses.length}</strong><small>Classes at your school</small></article>
+        </div>
+        <section class="classes-section">
+          <div class="classes-section-heading">
+            <div><div class="section-eyebrow">YOUR LEARNING</div><h3>My classes</h3></div>
+            <span class="classes-count">${enrolledClasses.length}</span>
+          </div>
+          <div class="classes-grid">
+            ${enrolledClasses.length
+              ? enrolledClasses.map((classInfo) => renderCard(classInfo, true)).join('')
+              : '<p class="classes-empty">You are not enrolled in any classes yet.</p>'}
+          </div>
+        </section>
+        <section class="classes-section">
+          <div class="classes-section-heading">
+            <div><div class="section-eyebrow">DISCOVER</div><h3>Find a class</h3></div>
+            <span class="classes-count">${availableClasses.length}</span>
+          </div>
+          <div class="classes-grid">
+            ${availableClasses.length
+              ? availableClasses.map((classInfo) => renderCard(classInfo, false)).join('')
+              : '<p class="classes-empty">There are no other classes available right now.</p>'}
+          </div>
+        </section>
       </div>
     `;
   },
 
   async renderTeacherView(content, currentUser, classes) {
-    content.innerHTML = `
-      <div style="margin-bottom:20px;">
-        <h4>My Classes</h4>
-        <button onclick="Classes.createNewClass()" class="btn-secondary" style="margin-bottom:15px;">+ Create New Class</button>
-        <div id="teacher-classes-list">
-          ${classes.length
-            ? classes.map((classInfo) => `
-                <div class="class-card themed-panel">
-                  <div><strong>${this.escapeHtml(classInfo.name)} (${this.escapeHtml(classInfo.subject)})</strong></div>
-                  <div class="muted" style="display:flex; flex-wrap:wrap; gap:12px; font-size:0.95em;">
-                    <span><strong>Class ID:</strong> ${this.escapeHtml(classInfo.id)}</span>
-                    <span><strong>Students:</strong> ${classInfo.studentCount}</span>
-                    <span><strong>Teacher:</strong> ${this.escapeHtml(classInfo.teacher?.name || currentUser.name)}</span>
-                  </div>
-                  <div class="class-actions">
-                    <button onclick="Classes.openClassDetail('${this.escapeHtml(classInfo.id)}')" class="btn-primary">Manage Class</button>
-                  </div>
-                  ${classInfo.pendingRequests?.length ? `
-                    <div style="margin-top:10px;">
-                      <h6>Pending Requests:</h6>
-                      <ul>
-                        ${classInfo.pendingRequests.map((request) => `
-                          <li style="display:flex; justify-content:space-between; align-items:center; margin:5px 0;">
-                            <span>${this.escapeHtml(request.studentName || request.studentEmail)}</span>
-                            <div>
-                              <button onclick="Classes.acceptRequest('${this.escapeHtml(classInfo.id)}', '${this.escapeHtml(request.id)}')" class="btn-secondary" style="margin-right:5px;">Accept</button>
-                              <button onclick="Classes.rejectRequest('${this.escapeHtml(classInfo.id)}', '${this.escapeHtml(request.id)}')" class="btn-primary">Reject</button>
-                            </div>
-                          </li>
-                        `).join('')}
-                      </ul>
-                    </div>
-                  ` : ''}
-                </div>
-              `).join('')
-            : '<p>You are not teaching any classes yet.</p>'}
+    const studentCount = classes.reduce((total, classInfo) => total + (Number(classInfo.studentCount) || 0), 0);
+    const pendingCount = classes.reduce((total, classInfo) => total + (classInfo.pendingRequests?.length || 0), 0);
+    const classCards = classes.map((classInfo) => `
+      <article class="classes-card">
+        <div class="classes-card-heading">
+          <span class="classes-card-icon icon-mask icon-classes" aria-hidden="true"></span>
+          <span class="classes-subject">${this.escapeHtml(classInfo.subject || 'Class')}</span>
         </div>
+        <h4>${this.escapeHtml(classInfo.name)}</h4>
+        <p class="classes-card-teacher">Teacher <strong>${this.escapeHtml(classInfo.teacher?.name || currentUser.name || 'You')}</strong></p>
+        <div class="classes-card-meta">
+          <span><strong>${Number(classInfo.studentCount) || 0}</strong> students</span>
+          <span class="classes-id">ID ${this.escapeHtml(classInfo.id)}</span>
+        </div>
+        <button type="button" class="app-primary-button" onclick="Classes.openClassDetail('${this.escapeHtml(classInfo.id)}')">Manage class</button>
+        ${classInfo.pendingRequests?.length ? `
+          <details class="classes-requests">
+            <summary>${classInfo.pendingRequests.length} pending request${classInfo.pendingRequests.length === 1 ? '' : 's'}</summary>
+            <div class="classes-request-list">
+              ${classInfo.pendingRequests.map((request) => `
+                <div class="classes-request-row">
+                  <span>${this.escapeHtml(request.studentName || request.studentEmail)}</span>
+                  <div>
+                    <button type="button" class="app-secondary-button" onclick="Classes.acceptRequest('${this.escapeHtml(classInfo.id)}', '${this.escapeHtml(request.id)}')">Accept</button>
+                    <button type="button" class="app-secondary-button" onclick="Classes.rejectRequest('${this.escapeHtml(classInfo.id)}', '${this.escapeHtml(request.id)}')">Reject</button>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </details>
+        ` : ''}
+      </article>
+    `).join('');
+
+    content.innerHTML = `
+      <div class="classes-page">
+        <section class="classes-hero">
+          <div>
+            <div class="section-eyebrow">TEACHING SPACE</div>
+            <h2>Your classes, ${this.escapeHtml(currentUser.name || 'teacher')}</h2>
+            <p>Manage your classes, review enrollment requests, and share resources.</p>
+          </div>
+          <button type="button" class="app-primary-button" onclick="Classes.createNewClass()">Create a class</button>
+        </section>
+        <div class="classes-summary">
+          <article><span>YOUR CLASSES</span><strong>${classes.length}</strong><small>Classes you manage</small></article>
+          <article><span>STUDENTS</span><strong>${studentCount}</strong><small>Across your classes</small></article>
+          <article><span>REQUESTS</span><strong>${pendingCount}</strong><small>Waiting for review</small></article>
+        </div>
+        <section class="classes-section">
+          <div class="classes-section-heading">
+            <div><div class="section-eyebrow">CLASSROOMS</div><h3>My classes</h3></div>
+            <span class="classes-count">${classes.length}</span>
+          </div>
+          <div class="classes-grid">
+            ${classes.length ? classCards : '<p class="classes-empty">You are not teaching any classes yet. Create one to get started.</p>'}
+          </div>
+        </section>
       </div>
     `;
   },
@@ -213,23 +250,24 @@ const Classes = {
     const enrolledStudents = classInfo.students || [];
 
     const header = `
-      <div class="themed-panel" style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom: 20px; flex-wrap: wrap;">
-        <div>
-          <div style="font-size:1.1em; font-weight:700; margin-bottom:8px;">${this.escapeHtml(classInfo.name)}</div>
-          <div class="muted" style="font-size:0.95em;">
-            <span style="margin-right:16px;"><strong>Teacher:</strong> ${this.escapeHtml(teacher.name)}</span>
-            <span style="margin-right:16px;"><strong>Class ID:</strong> ${this.escapeHtml(classInfo.id)}</span>
-            <span><strong>Students:</strong> ${enrolledStudents.length}</span>
-          </div>
+      <section class="class-detail-hero">
+        <div class="class-detail-heading">
+          <button type="button" class="app-secondary-button class-back-button" onclick="Classes.goBackToClasses()">Back to classes</button>
+          <div class="section-eyebrow">CLASS WORKSPACE</div>
+          <h2>${this.escapeHtml(classInfo.name)}</h2>
+          <p>${this.escapeHtml(classInfo.subject || 'Class')} <span aria-hidden="true">·</span> Taught by ${this.escapeHtml(teacher.name)}</p>
         </div>
-        <button onclick="Classes.goBackToClasses()" class="btn-secondary">Back to Classes</button>
-      </div>
+        <div class="class-detail-meta">
+          <span><small>STUDENTS</small><strong>${enrolledStudents.length}</strong></span>
+          <span><small>CLASS ID</small><strong>${this.escapeHtml(classInfo.id)}</strong></span>
+        </div>
+      </section>
     `;
 
     const tabBar = `
-      <div class="class-tab-bar">
-        <button onclick="Classes.switchClassTab('grades')" class="class-tab-btn active" data-tab="grades">📊 Grades</button>
-        <button onclick="Classes.switchClassTab('classwork')" class="class-tab-btn" data-tab="classwork">📋 Class Work</button>
+      <div class="class-workspace-tabs" role="tablist" aria-label="Class workspace">
+        <button type="button" onclick="Classes.switchClassTab('grades')" class="class-tab-btn active" data-tab="grades" role="tab" aria-selected="true">Grades</button>
+        <button type="button" onclick="Classes.switchClassTab('classwork')" class="class-tab-btn" data-tab="classwork" role="tab" aria-selected="false">Files &amp; resources</button>
       </div>
     `;
     const classworkTabContent = this.renderClassworkTab(currentUser);
@@ -240,9 +278,9 @@ const Classes = {
             const studentGrades = (classInfo.studentGrades && classInfo.studentGrades[String(student.email).toLowerCase()]) || {};
             return `
               <tr data-email="${this.escapeHtml(student.email)}">
-                    <td>${this.escapeHtml(student.name)}</td>
+                <td>${this.escapeHtml(student.name)}</td>
                 ${Table.gradeFields.map(field => `
-                  <td contenteditable="true" class="grade-cell" data-field="${this.escapeHtml(field)}" style="min-width: 80px; padding: 10px; border: 1px solid rgba(0,0,0,0.06);">${this.escapeHtml(studentGrades[field] ?? '')}</td>
+                  <td contenteditable="true" class="grade-cell" data-field="${this.escapeHtml(field)}" aria-label="${this.escapeHtml(`${student.name} ${field}`)}">${this.escapeHtml(studentGrades[field] ?? '')}</td>
                 `).join('')}
               </tr>
             `;
@@ -250,27 +288,30 @@ const Classes = {
         : '';
 
       const gradesTabContent = `
-        <div id="class-tab-grades" class="class-tab-content" style="display: block;">
-          <div class="themed-panel" style="margin-bottom:20px;">
-            <h4 style="margin-top:0;">Enrolled Students & Grades</h4>
+        <section id="class-tab-grades" class="class-tab-content">
+          <div class="class-detail-card">
+            <div class="class-detail-section-heading">
+              <div><div class="section-eyebrow">ASSESSMENT</div><h3>Student grades</h3></div>
+              <span class="classes-count">${enrolledStudents.length}</span>
+            </div>
             ${enrolledStudents.length > 0 ? `
-              <div style="overflow-x:auto;">
-                <table id="class-grades-table" style="width:100%; border-collapse: collapse; text-align:left;">
+              <div class="class-table-wrap">
+                <table id="class-grades-table" class="class-grade-table">
                   <thead>
                     <tr>
-                        <th style="border-bottom:1px solid rgba(0,0,0,0.06); padding: 12px;">Student</th>
-                        ${Table.gradeFields.map(field => `<th style="border-bottom:1px solid rgba(0,0,0,0.06); padding: 12px;">${this.escapeHtml(field)}</th>`).join('')}
+                      <th>Student</th>
+                      ${Table.gradeFields.map(field => `<th>${this.escapeHtml(field)}</th>`).join('')}
                     </tr>
                   </thead>
-                  <tbody>
-                    ${rows}
-                  </tbody>
+                  <tbody>${rows}</tbody>
                 </table>
               </div>
-              <button onclick="Classes.saveClassGrades()" class="btn-secondary" style="margin-top: 16px;">Save Class Grades</button>
-            ` : '<p class="muted">No students are currently enrolled in this class.</p>'}
+              <div class="class-detail-actions">
+                <button type="button" onclick="Classes.saveClassGrades()" class="app-primary-button">Save grades</button>
+              </div>
+            ` : '<p class="class-detail-empty">No students are currently enrolled in this class.</p>'}
           </div>
-        </div>
+        </section>
       `;
 
       content.innerHTML = `
@@ -289,10 +330,7 @@ const Classes = {
       );
       const studentGrades = emailKey ? allGrades[emailKey] : {};
       const gradeRows = Table.gradeFields.map((field) => `
-        <tr>
-          <th>${this.escapeHtml(field)}</th>
-          <td>${this.escapeHtml(studentGrades[field] ?? '')}</td>
-        </tr>
+        <tr><th>${this.escapeHtml(field)}</th><td>${this.escapeHtml(studentGrades[field] ?? '')}</td></tr>
       `).join('');
       const hasGrades = Table.gradeFields.some((field) =>
         studentGrades[field] !== undefined && studentGrades[field] !== null && String(studentGrades[field]).trim() !== ''
@@ -300,12 +338,21 @@ const Classes = {
       content.innerHTML = `
         ${header}
         ${tabBar}
-        <div id="class-tab-grades" class="class-tab-content" style="display: block;">
-          <div class="themed-panel">
-            <h4 style="margin-top:0;">Your Grades</h4>
-            ${hasGrades ? `<table class="student-grades-table"><thead><tr><th>Field</th><th>Grade</th></tr></thead><tbody>${gradeRows}</tbody></table>` : '<p class="muted" style="margin-bottom:0;">Your grades will appear here.</p>'}
+        <section id="class-tab-grades" class="class-tab-content">
+          <div class="class-detail-card">
+            <div class="class-detail-section-heading">
+              <div><div class="section-eyebrow">ASSESSMENT</div><h3>Your grades</h3></div>
+            </div>
+            ${hasGrades ? `
+              <div class="class-table-wrap">
+                <table class="class-grade-table student-grades-table">
+                  <thead><tr><th>Assessment</th><th>Grade</th></tr></thead>
+                  <tbody>${gradeRows}</tbody>
+                </table>
+              </div>
+            ` : '<p class="class-detail-empty">Your grades will appear here.</p>'}
           </div>
-        </div>
+        </section>
         ${classworkTabContent}
       `;
     }
@@ -319,21 +366,23 @@ const Classes = {
   renderClassworkTab(user) {
     const canUpload = Auth.isTeacherOrHigher(user);
     return `
-      <div id="class-tab-classwork" class="class-tab-content" style="display:none;">
-        <div class="themed-panel">
-          <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
-            <h4 style="margin:0;">Class Work & Resources</h4>
+      <section id="class-tab-classwork" class="class-tab-content" hidden>
+        <div class="class-detail-card">
+          <div class="class-detail-section-heading">
+            <div><div class="section-eyebrow">SHARED MATERIALS</div><h3>Files &amp; resources</h3></div>
             ${canUpload ? `
-              <div>
-                <input id="classwork-upload-input" type="file" multiple style="display:none;">
-                <button id="classwork-upload-button" type="button" class="btn-primary">Upload files</button>
+              <div class="class-upload-controls">
+                <input id="classwork-upload-input" type="file" multiple hidden>
+                <button id="classwork-upload-button" type="button" class="app-primary-button">Upload files</button>
               </div>
             ` : ''}
           </div>
-          <p id="classwork-upload-status" class="muted" aria-live="polite" style="margin:10px 0;"></p>
-          <div id="classwork-files-list" class="muted">Loading files...</div>
+          <p id="classwork-upload-status" class="class-upload-status" aria-live="polite"></p>
+          <div id="classwork-files-list" class="class-file-list" aria-live="polite">
+            <p class="class-detail-empty">Loading files…</p>
+          </div>
         </div>
-      </div>
+      </section>
     `;
   },
 
@@ -347,26 +396,40 @@ const Classes = {
       container.replaceChildren();
 
       if (!files.length) {
-        container.textContent = 'No files uploaded yet.';
+        container.innerHTML = '<p class="class-detail-empty">No files have been uploaded to this class yet.</p>';
         return;
       }
 
       const list = document.createElement('ul');
-      list.style.cssText = 'list-style:none; padding:0; margin:0;';
+      list.className = 'class-file-list-items';
       files.forEach((file) => {
         const item = document.createElement('li');
-        item.style.cssText = 'display:flex; justify-content:space-between; align-items:center; gap:12px; padding:10px 0; border-top:1px solid rgba(0,0,0,0.08);';
+        item.className = 'class-file-row';
+        const info = document.createElement('div');
+        info.className = 'class-file-info';
+        const name = document.createElement('strong');
+        name.textContent = file.filename;
+        const metadata = document.createElement('small');
+        metadata.textContent = `${this.formatFileSize(file.size)} · ${file.mimeType || 'File'}`;
+        info.append(name, metadata);
+        item.appendChild(info);
 
-        const name = document.createElement('span');
-        name.textContent = `${file.filename} (${this.formatFileSize(file.size)})`;
-        item.appendChild(name);
+        const actions = document.createElement('div');
+        actions.className = 'class-file-actions';
+        const previewButton = document.createElement('button');
+        previewButton.type = 'button';
+        previewButton.className = 'app-secondary-button';
+        previewButton.textContent = 'Preview';
+        previewButton.addEventListener('click', () => this.previewClassFile(file));
+        actions.appendChild(previewButton);
 
         const downloadButton = document.createElement('button');
         downloadButton.type = 'button';
-        downloadButton.className = 'btn-secondary';
+        downloadButton.className = 'app-secondary-button';
         downloadButton.textContent = 'Download';
         downloadButton.addEventListener('click', () => this.downloadClassFile(file.path, file.filename));
-        item.appendChild(downloadButton);
+        actions.appendChild(downloadButton);
+        item.appendChild(actions);
         list.appendChild(item);
       });
       container.appendChild(list);
@@ -406,6 +469,120 @@ const Classes = {
     }
   },
 
+  async previewClassFile(file) {
+    const dialog = document.getElementById('file-preview-dialog');
+    const title = document.getElementById('file-preview-title');
+    const content = document.getElementById('file-preview-content');
+    const downloadLink = document.getElementById('file-preview-download');
+    const status = document.getElementById('classwork-upload-status');
+    if (!dialog || !title || !content || !downloadLink) return;
+
+    if (dialog.dataset.objectUrl) URL.revokeObjectURL(dialog.dataset.objectUrl);
+    delete dialog.dataset.objectUrl;
+    title.textContent = file.filename;
+    content.innerHTML = '<p class="file-preview-message">Loading preview…</p>';
+    downloadLink.removeAttribute('href');
+    downloadLink.removeAttribute('download');
+    downloadLink.hidden = true;
+    if (!dialog.dataset.cleanupAttached) {
+      dialog.addEventListener('close', () => {
+        if (dialog.dataset.objectUrl) URL.revokeObjectURL(dialog.dataset.objectUrl);
+        delete dialog.dataset.objectUrl;
+      });
+      dialog.dataset.cleanupAttached = 'true';
+      document.getElementById('file-preview-close')?.addEventListener('click', () => dialog.close());
+    }
+
+    const previewRequestId = (this.filePreviewRequestId || 0) + 1;
+    this.filePreviewRequestId = previewRequestId;
+    dialog.showModal();
+    try {
+      const blob = await FileTransferService.downloadFileBlob(file.path, this.selectedClassId);
+      if (!dialog.open || this.filePreviewRequestId !== previewRequestId) return;
+
+      const extension = String(file.filename || '').split('.').pop().toLowerCase();
+      const typeByExtension = {
+        avif: 'image/avif',
+        bmp: 'image/bmp',
+        csv: 'text/csv',
+        gif: 'image/gif',
+        jpeg: 'image/jpeg',
+        jpg: 'image/jpeg',
+        json: 'application/json',
+        md: 'text/markdown',
+        mp3: 'audio/mpeg',
+        mp4: 'video/mp4',
+        ogg: 'audio/ogg',
+        png: 'image/png',
+        pdf: 'application/pdf',
+        svg: 'image/svg+xml',
+        txt: 'text/plain',
+        wav: 'audio/wav',
+        webm: 'video/webm',
+        webp: 'image/webp',
+        xml: 'application/xml',
+        yaml: 'text/yaml',
+        yml: 'text/yaml'
+      };
+      const suppliedType = String(file.mimeType || blob.type || '').toLowerCase();
+      const mimeType = suppliedType && suppliedType !== 'application/octet-stream'
+        ? suppliedType
+        : typeByExtension[extension] || suppliedType || 'application/octet-stream';
+      const objectUrl = URL.createObjectURL(blob);
+      dialog.dataset.objectUrl = objectUrl;
+      downloadLink.href = objectUrl;
+      downloadLink.download = file.filename;
+      downloadLink.hidden = false;
+      content.replaceChildren();
+
+      if (mimeType.startsWith('image/')) {
+        const image = document.createElement('img');
+        image.className = 'file-preview-image';
+        image.src = objectUrl;
+        image.alt = file.filename;
+        content.appendChild(image);
+      } else if (mimeType === 'application/pdf' || extension === 'pdf') {
+        const frame = document.createElement('iframe');
+        frame.className = 'file-preview-frame';
+        frame.src = objectUrl;
+        frame.title = `${file.filename} preview`;
+        content.appendChild(frame);
+      } else if (mimeType.startsWith('video/')) {
+        const video = document.createElement('video');
+        video.className = 'file-preview-media';
+        video.controls = true;
+        video.src = objectUrl;
+        content.appendChild(video);
+      } else if (mimeType.startsWith('audio/')) {
+        const audio = document.createElement('audio');
+        audio.className = 'file-preview-media';
+        audio.controls = true;
+        audio.src = objectUrl;
+        content.appendChild(audio);
+      } else if (mimeType.startsWith('text/') || mimeType === 'application/json' || ['csv', 'json', 'md', 'txt', 'xml', 'yaml', 'yml'].includes(extension)) {
+        const text = await blob.slice(0, 512 * 1024).text();
+        if (!dialog.open || this.filePreviewRequestId !== previewRequestId) {
+          URL.revokeObjectURL(objectUrl);
+          return;
+        }
+        const pre = document.createElement('pre');
+        pre.className = 'file-preview-text';
+        pre.textContent = text;
+        if (blob.size > 512 * 1024) pre.textContent += '\n\nPreview truncated at 512 KB.';
+        content.appendChild(pre);
+      } else {
+        const message = document.createElement('p');
+        message.className = 'file-preview-message';
+        message.textContent = 'A preview is not available for this file type. Download it to open it.';
+        content.appendChild(message);
+      }
+    } catch (error) {
+      if (!dialog.open || this.filePreviewRequestId !== previewRequestId) return;
+      content.textContent = error.message || 'Unable to load this file preview.';
+      if (status) status.textContent = error.message || 'Unable to load this file preview.';
+    }
+  },
+
   async downloadClassFile(filePath, filename) {
     try {
       const blob = await FileTransferService.downloadFileBlob(filePath, this.selectedClassId);
@@ -432,29 +609,19 @@ const Classes = {
     const content = document.getElementById('class-detail-content');
     if (!content) return;
 
-    // Hide all tabs
     const allTabs = content.querySelectorAll('.class-tab-content');
-    allTabs.forEach(tab => tab.style.display = 'none');
-
-    // Show selected tab
+    allTabs.forEach((tab) => {
+      tab.hidden = tab.id !== `class-tab-${tabName}`;
+    });
     const selectedTab = content.querySelector(`#class-tab-${tabName}`);
-    if (selectedTab) {
-      selectedTab.style.display = 'block';
-    }
+    if (selectedTab) selectedTab.hidden = false;
     if (tabName === 'classwork') this.loadClassFiles(this.selectedClassId);
 
-    // Update tab buttons
     const allButtons = content.querySelectorAll('.class-tab-btn');
     allButtons.forEach(btn => {
-      if (btn.dataset.tab === tabName) {
-        btn.classList.add('active');
-        btn.style.borderBottom = '3px solid #3498db';
-        btn.style.color = '#3498db';
-      } else {
-        btn.classList.remove('active');
-        btn.style.borderBottom = '3px solid transparent';
-        btn.style.color = '#999';
-      }
+      const active = btn.dataset.tab === tabName;
+      btn.classList.toggle('active', active);
+      btn.setAttribute('aria-selected', String(active));
     });
   },
   
@@ -488,11 +655,14 @@ const Classes = {
         method: 'PUT',
         body: { studentGrades }
       });
-      alert('Class grades saved successfully.');
+      await AppDialogs.alert('Class grades saved successfully.', { title: 'Grades saved' });
       await this.renderClassDetail();
     } catch (error) {
       console.error('Error saving class grades:', error);
-      alert(error.message || 'Error saving class grades. Please try again.');
+      await AppDialogs.alert(error.message || 'Error saving class grades. Please try again.', {
+        title: 'Could not save grades',
+        danger: true
+      });
     } finally {
       if (saveButton) saveButton.disabled = false;
     }
@@ -513,12 +683,15 @@ const Classes = {
         method: 'POST',
         body: {}
       });
-      alert('Request sent! The teacher will review your request.');
+      await AppDialogs.alert('Request sent! The teacher will review your request.', { title: 'Request sent' });
       await this.render();
 
     } catch (error) {
       console.error('Error requesting to join class:', error);
-      alert(error.message || 'Error sending request. Please try again.');
+      await AppDialogs.alert(error.message || 'Error sending request. Please try again.', {
+        title: 'Could not send request',
+        danger: true
+      });
     }
   },
 
@@ -534,12 +707,15 @@ const Classes = {
         method: 'POST',
         body: { action: 'accept' }
       });
-      alert('Student accepted into class!');
+      await AppDialogs.alert('Student accepted into class!', { title: 'Student added' });
       await this.render();
 
     } catch (error) {
       console.error('Error accepting request:', error);
-      alert(error.message || 'Error accepting request. Please try again.');
+      await AppDialogs.alert(error.message || 'Error accepting request. Please try again.', {
+        title: 'Could not accept request',
+        danger: true
+      });
     }
   },
 
@@ -555,12 +731,15 @@ const Classes = {
         method: 'POST',
         body: { action: 'reject' }
       });
-      alert('Request rejected.');
+      await AppDialogs.alert('Request rejected.', { title: 'Request rejected' });
       await this.render();
 
     } catch (error) {
       console.error('Error rejecting request:', error);
-      alert(error.message || 'Error rejecting request. Please try again.');
+      await AppDialogs.alert(error.message || 'Error rejecting request. Please try again.', {
+        title: 'Could not reject request',
+        danger: true
+      });
     }
   },
 
@@ -569,10 +748,18 @@ const Classes = {
     if (!this.ensureTeacherAccess(currentUser)) {
       return;
     }
-    const className = prompt('Enter class name:');
+    const className = await AppDialogs.prompt('Enter a name for your new class.', {
+      title: 'Create a class',
+      inputLabel: 'Class name',
+      placeholder: 'For example, Biology 10'
+    });
     if (!className || !className.trim()) return;
 
-    const subject = prompt('Enter subject:');
+    const subject = await AppDialogs.prompt('What subject does this class teach?', {
+      title: 'Set class subject',
+      inputLabel: 'Subject',
+      placeholder: 'For example, Biology'
+    });
     if (!subject || !subject.trim()) return;
 
     if (!currentUser) return;
@@ -586,12 +773,15 @@ const Classes = {
           schoolId: (typeof App !== 'undefined' && App.currentSchoolId) || currentUser.school_id
         }
       });
-      alert('Class created successfully!');
+      await AppDialogs.alert('Class created successfully!', { title: 'Class created' });
       await this.render();
 
     } catch (error) {
       console.error('Error creating class:', error);
-      alert(error.message || 'Error creating class. Please try again.');
+      await AppDialogs.alert(error.message || 'Error creating class. Please try again.', {
+        title: 'Could not create class',
+        danger: true
+      });
     }
   }
 };

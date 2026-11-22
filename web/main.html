@@ -148,6 +148,21 @@
   </div>
 </main>
 
+<dialog class="file-preview-dialog" id="file-preview-dialog" aria-labelledby="file-preview-title">
+  <div class="file-preview-shell">
+    <header class="file-preview-header">
+      <div><div class="section-eyebrow">FILE PREVIEW</div><h2 id="file-preview-title"></h2></div>
+      <button class="app-secondary-button" id="file-preview-close" type="button">Close</button>
+    </header>
+    <div class="file-preview-content" id="file-preview-content"></div>
+    <footer class="file-preview-actions">
+      <span>Preview files before downloading.</span>
+      <a class="app-primary-button" id="file-preview-download" hidden>Download file</a>
+    </footer>
+  </div>
+</dialog>
+
+<script src="/Code/Modules/dialogModule.js"></script>
 <script src="/Code/Modules/storageModule.js"></script>
 <script src="/Code/Modules/authModule.js"></script>
 <script src="/Code/Modules/apiModule.js"></script>

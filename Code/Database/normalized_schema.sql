@@ -15,7 +15,7 @@
 -- class_members: class_id uuid, user_id uuid, role, joined_at
 -- class_join_requests: id uuid, class_id uuid, student_id uuid, status, requested_at,
 --                     reviewed_at, reviewed_by
--- school_announcements: id uuid, school_id uuid, title, category, content,
+-- school_announcements: id uuid, school_id uuid, title, category, content, image_path,
 --                      created_by uuid, created_at, updated_at
 -- classwork: id uuid, class_id uuid, title, description, due_at, created_by uuid
 -- grades: id uuid, classwork_id uuid, student_id uuid, score, updated_at
