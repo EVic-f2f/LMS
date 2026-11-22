@@ -487,7 +487,7 @@ function getSessionEmail(req) {
     const token = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
     const [encodedClaims, signature, extra] = token.split(".");
     if (!encodedClaims || !signature || extra) {
-        const error = new Error("Sign in to access file storage.");
+        const error = new Error("Sign in to access this resource.");
         error.statusCode = 401;
         throw error;
     }
@@ -510,7 +510,7 @@ function getSessionEmail(req) {
         if (!claims.email || claims.expiresAt < Date.now()) throw new Error("Expired session");
         return String(claims.email).toLowerCase();
     } catch {
-        const error = new Error("Sign in again to access file storage.");
+        const error = new Error("Sign in again to access this resource.");
         error.statusCode = 401;
         throw error;
     }

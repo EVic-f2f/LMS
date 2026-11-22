@@ -63,6 +63,12 @@
       try {
         const currentUser = JSON.parse(localStorage.getItem('lmsCurrentUser') || 'null');
         if (currentUser?.email) {
+          const sessionToken = localStorage.getItem('lmsSessionToken');
+          if (!sessionToken) {
+            localStorage.removeItem('lmsCurrentUser');
+            window.location.replace('sign-in.html');
+            return;
+          }
           addAction('Join School', 'join-school.html');
           addAction('Create School', 'create-school.html');
           openSchoolButton = document.createElement('button');
@@ -81,9 +87,17 @@
               showSchoolMenu(userSchools, openSchoolButton);
             }
           };
-          fetch(`/api/schools/for-user?email=${encodeURIComponent(currentUser.email)}`)
-            .then(response => response.json().then(data => ({ response, data })))
+          fetch('/api/schools/for-user', {
+            headers: { Authorization: `Bearer ${sessionToken}` }
+          })
+            .then(response => response.json().catch(() => ({})).then(data => ({ response, data })))
             .then(({ response, data }) => {
+              if (response.status === 401) {
+                localStorage.removeItem('lmsCurrentUser');
+                localStorage.removeItem('lmsSessionToken');
+                window.location.replace('sign-in.html');
+                return;
+              }
               if (!response.ok || !data.success) throw new Error(data.error || 'Could not load schools');
               userSchools = data.schools || [];
               membershipsLoaded = true;
@@ -91,6 +105,7 @@
             .catch(error => {
               membershipsLoaded = true;
               console.warn('Could not load school memberships:', error);
+              msg.textContent = `Could not load your schools: ${error.message}`;
             });
           if (!['Administrator', 'Admin'].includes(currentUser.status)) {
             hdButton.remove();

@@ -39,6 +39,7 @@
   <script>
     (() => {
       const user = JSON.parse(localStorage.getItem('lmsCurrentUser') || 'null');
+      const sessionToken = localStorage.getItem('lmsSessionToken');
       const list = document.getElementById('school-list');
       const search = document.getElementById('school-search');
       const message = document.getElementById('join-message');
@@ -47,6 +48,11 @@
       const accountLink = document.getElementById('join-account-link');
       let schools = [];
       if (user?.email) {
+        if (!sessionToken) {
+          localStorage.removeItem('lmsCurrentUser');
+          window.location.replace('sign-in.html');
+          return;
+        }
         signInLink.hidden = true;
         accountLink.hidden = false;
       }
@@ -78,9 +84,27 @@
         const selected = list.querySelector('input[name="schoolId"]:checked');
         if (!user?.email) { message.textContent = 'Please sign in before requesting to join a school.'; message.style.color = '#c0392b'; return; }
         if (!selected) { message.textContent = 'Select a school first.'; message.style.color = '#c0392b'; return; }
+        if (!sessionToken) {
+          localStorage.removeItem('lmsCurrentUser');
+          window.location.replace('sign-in.html');
+          return;
+        }
         try {
-          const response = await fetch('/api/schools/request-join', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ email:user.email, schoolId:selected.value }) });
-          const result = await response.json();
+          const response = await fetch('/api/schools/request-join', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${sessionToken}`
+            },
+            body: JSON.stringify({ schoolId: selected.value })
+          });
+          const result = await response.json().catch(() => ({}));
+          if (response.status === 401) {
+            localStorage.removeItem('lmsCurrentUser');
+            localStorage.removeItem('lmsSessionToken');
+            window.location.replace('sign-in.html');
+            return;
+          }
           if (!response.ok || !result.success) throw new Error(result.error || 'Request failed');
           message.textContent = result.joined ? 'You joined the school.' : 'Join request sent.';
           message.style.color = '#27804a';
