@@ -94,8 +94,18 @@ const IntroVideo = {
     this.overlay.style.setProperty("--vic-loader-background", background);
     this.overlay.style.setProperty("--vic-loader-surface", surface);
     this.overlay.style.setProperty("--vic-loader-text", text);
-    this.overlay.style.background =
-      `linear-gradient(135deg, ${surface} 0%, ${background} 58%, ${secondary} 180%)`;
+    this.overlay.style.setProperty("--vic-loader-app-background", this.getAppBackground(background));
+    this.overlay.style.removeProperty("background");
+  },
+
+  getAppBackground(fallback = "#f4f1f1") {
+    if (!document.body) return fallback;
+    const bodyStyle = getComputedStyle(document.body);
+    const image = bodyStyle.backgroundImage;
+    if (image && image !== "none") return image;
+    return bodyStyle.backgroundColor && bodyStyle.backgroundColor !== "rgba(0, 0, 0, 0)"
+      ? bodyStyle.backgroundColor
+      : fallback;
   },
 
   colorRgba(color, alpha) {
@@ -155,6 +165,10 @@ const IntroVideo = {
     if (!this.overlay) return;
     if (this.overlay.classList.contains("is-fading")) return;
 
+    const appBackground = this.getAppBackground(
+      this.themeColors?.background || "#f4f1f1"
+    );
+    this.overlay.style.setProperty("--vic-loader-app-background", appBackground);
     this.overlay.classList.add("is-fading");
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const lingerDelay = reducedMotion ? 150 : 2200;
