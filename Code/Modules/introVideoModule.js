@@ -24,8 +24,20 @@ const IntroVideo = {
     this.setupParticleCanvas();
     this.showOverlay();
 
-    const duration = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 1500 : 4200;
+    const navigating = sessionStorage.getItem("vic-loading-navigation") === "1";
+    const duration = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      ? 1500
+      : navigating ? 2600 : 4200;
     this.finishTimer = window.setTimeout(() => this.finish(), duration);
+
+    window.addEventListener("beforeunload", () => {
+      sessionStorage.setItem("vic-loading-navigation", "1");
+    }, { once: true });
+  },
+
+  navigate(url) {
+    sessionStorage.setItem("vic-loading-navigation", "1");
+    window.location.href = url;
   },
 
   createOverlay() {
@@ -51,7 +63,7 @@ const IntroVideo = {
           </div>
         </div>
       `;
-      document.body.appendChild(overlay);
+      (document.body || document.documentElement).appendChild(overlay);
     }
 
     this.overlay = overlay;
@@ -180,6 +192,7 @@ const IntroVideo = {
       this.overlay.classList.add("hidden");
       this.overlay.classList.remove("is-fading");
       this.hideTimer = null;
+      sessionStorage.removeItem("vic-loading-navigation");
     }, lingerDelay);
   },
 

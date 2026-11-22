@@ -6,6 +6,7 @@
   <title>Join School | VIC systems</title>
   <link rel="stylesheet" href="/styles/main.css">
   <script src="/Code/Modules/vicThemeModule.js"></script>
+  <script src="/Code/Modules/introVideoModule.js"></script>
   <style>
     .join-toolbar { display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
     .join-toolbar input { flex:1 1 260px; min-height:40px; padding:9px 12px; border:1px solid #cbd5dc; border-radius:6px; }
@@ -36,7 +37,6 @@
       <p class="join-message" id="join-message" role="status"></p>
     </div>
   </main>
-  <script src="/Code/Modules/introVideoModule.js"></script>
   <script>
     (() => {
       const user = JSON.parse(localStorage.getItem('lmsCurrentUser') || 'null');

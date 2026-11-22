@@ -6,6 +6,7 @@
   <title>VIC Home</title>
   <link rel="stylesheet" href="/styles/main.css" />
   <script src="/Code/Modules/vicThemeModule.js"></script>
+  <script src="/Code/Modules/introVideoModule.js"></script>
 </head>
 <body class="vic-home-page">
   <header class="topbar">
@@ -41,7 +42,6 @@
     </div>
   </main>
 
-  <script src="/Code/Modules/introVideoModule.js"></script>
   <script>
     (function () {
       const actions = document.getElementById('vic-topbar-actions');
@@ -83,7 +83,8 @@
             if (!membershipsLoaded) {
               showSchoolMenu([], openSchoolButton, 'Loading your schools…');
             } else if (userSchools.length === 1) {
-              window.location.href = `main.html?schoolId=${encodeURIComponent(userSchools[0].id)}`;
+              if (typeof IntroVideo !== "undefined") IntroVideo.navigate(`main.html?schoolId=${encodeURIComponent(userSchools[0].id)}`);
+              else window.location.href = `main.html?schoolId=${encodeURIComponent(userSchools[0].id)}`;
             } else {
               showSchoolMenu(userSchools, openSchoolButton);
             }
@@ -138,7 +139,8 @@
           item.className = 'vic-school-menu-item';
           item.textContent = school.name;
           item.addEventListener('click', () => {
-            window.location.href = `main.html?schoolId=${encodeURIComponent(school.id)}`;
+            if (typeof IntroVideo !== "undefined") IntroVideo.navigate(`main.html?schoolId=${encodeURIComponent(school.id)}`);
+            else window.location.href = `main.html?schoolId=${encodeURIComponent(school.id)}`;
           });
           menu.appendChild(item);
         });

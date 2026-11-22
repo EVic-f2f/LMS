@@ -4,7 +4,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   const page = window.location.pathname.split("/").pop();
 
   if (currentUser && (page === "sign-in.html" || page === "sign-up.html")) {
-    window.location.href = "vic-home.html";
+    if (typeof IntroVideo !== "undefined") IntroVideo.navigate("vic-home.html");
+    else window.location.href = "vic-home.html";
     return;
   }
 
@@ -23,7 +24,8 @@ document.addEventListener("DOMContentLoaded", async () => {
       try {
         const user = await Auth.login(email, password, remember);
         Auth.saveCurrentUser(user);
-        window.location.href = "vic-home.html";
+        if (typeof IntroVideo !== "undefined") IntroVideo.navigate("vic-home.html");
+        else window.location.href = "vic-home.html";
       } catch (err) {
         message.textContent = err.message;
         message.style.color = "#c0392b";
@@ -75,7 +77,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         Auth.saveCurrentUser(user);
         // School assignment is optional; new accounts always start at VIC Home.
-        window.location.href = "vic-home.html";
+        if (typeof IntroVideo !== "undefined") IntroVideo.navigate("vic-home.html");
+        else window.location.href = "vic-home.html";
       } catch (err) {
         message.textContent = err.message;
         message.style.color = "#c0392b";
