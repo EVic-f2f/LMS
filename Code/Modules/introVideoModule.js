@@ -30,14 +30,6 @@ const IntroVideo = {
       : navigating ? 2600 : 4200;
     this.finishTimer = window.setTimeout(() => this.finish(), duration);
 
-    if (document.readyState === "complete") {
-      window.setTimeout(() => this.finish(), navigating ? 350 : 700);
-    } else {
-      window.addEventListener("load", () => {
-        window.setTimeout(() => this.finish(), navigating ? 350 : 700);
-      }, { once: true });
-    }
-
     window.addEventListener("beforeunload", () => {
       sessionStorage.setItem("vic-loading-navigation", "1");
     }, { once: true });
@@ -184,14 +176,10 @@ const IntroVideo = {
     }
     if (!this.overlay) return;
     if (this.overlay.classList.contains("is-fading")) return;
-
-    const appBackground = this.getAppBackground(
-      this.themeColors?.background || "#f4f1f1"
-    );
-    this.overlay.style.setProperty("--vic-loader-app-background", appBackground);
+    this.overlay.style.removeProperty("background");
     this.overlay.classList.add("is-fading");
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const lingerDelay = reducedMotion ? 150 : 2200;
+    const lingerDelay = reducedMotion ? 150 : 1400;
     this.hideTimer = window.setTimeout(() => {
       if (this.animationFrame) {
         cancelAnimationFrame(this.animationFrame);

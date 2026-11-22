@@ -33,6 +33,8 @@
     var(--vic-loader-background) 58%,
     var(--vic-loader-secondary) 180%
   );
+  opacity: 1;
+  transition: opacity 900ms ease-in-out;
   z-index: 10000;
   overflow: hidden;
   user-select: none;
@@ -42,22 +44,9 @@
   display: none;
 }
 
-.vic-loading-screen::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: var(--vic-loader-app-background, #f4f1f1);
-  opacity: 0;
-  transition: opacity 1200ms ease-in-out;
-  z-index: 0;
-}
-
 .vic-loading-screen.is-fading {
-  background: var(--vic-loader-surface, #f8fafc);
-}
-
-.vic-loading-screen.is-fading::before {
-  opacity: 1;
+  background: transparent;
+  opacity: 0;
 }
 
 .vic-particle-canvas {
@@ -4280,4 +4269,7 @@ body.lms-app .school-update-status {
   body.lms-app .school-update-form-actions {
     grid-column: 1;
   }
+}
+@view-transition {
+  navigation: auto;
 }
