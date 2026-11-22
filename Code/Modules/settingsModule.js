@@ -2,6 +2,10 @@
  * Settings Module - Manages configuration settings from config.json
  */
 
+const ThemeColorUtils = typeof module !== "undefined" && module.exports
+  ? require("./colorUtils.js")
+  : ColorUtils;
+
 const Settings = {
   config: {},
   activeTab: "info",
@@ -144,6 +148,14 @@ const Settings = {
         if (textInput) textInput.value = colorInput.value;
       });
     });
+    container.querySelectorAll(".settings-color-field").forEach((field) => {
+      const colorInput = field.querySelector("[data-theme-key]");
+      const textInput = field.querySelector("[data-theme-text-key]");
+      textInput?.addEventListener("input", () => {
+        const pickerColor = ThemeColorUtils.toPickerColor(textInput.value);
+        if (pickerColor) colorInput.value = pickerColor;
+      });
+    });
     container.querySelector("#settings-save").onclick = () => this.save();
     container.querySelector("#settings-reload").onclick = () => this.load();
   },
@@ -269,24 +281,11 @@ const Settings = {
   },
 
   isColorValue(str) {
-    if (typeof str !== "string") return false;
-    // Check if it's a hex color or RGB
-    return /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/.test(str) || /^rgb/.test(str);
+    return ThemeColorUtils.isColorValue(str);
   },
 
   normalizeColor(str) {
-    if (/^#/.test(str)) return str;
-    if (/^rgb/.test(str)) {
-      // Simple rgb to hex conversion (not perfect but works)
-      const match = str.match(/\d+/g);
-      if (match && match.length >= 3) {
-        const r = parseInt(match[0]).toString(16).padStart(2, '0');
-        const g = parseInt(match[1]).toString(16).padStart(2, '0');
-        const b = parseInt(match[2]).toString(16).padStart(2, '0');
-        return `#${r}${g}${b}`;
-      }
-    }
-    return "#000000";
+    return ThemeColorUtils.toPickerColor(str) || "#000000";
   },
 
   renderArray(arr, parent, fieldKey, depth) {

@@ -184,14 +184,30 @@
     container.replaceChildren();
     keys.forEach((key) => {
       const label = document.createElement('label');
-      label.textContent = key;
+      label.appendChild(document.createTextNode(key));
+      const controls = document.createElement('span');
+      controls.className = 'monitor-color-control';
+      const picker = document.createElement('input');
+      picker.type = 'color';
+      picker.className = 'monitor-color-picker';
+      picker.setAttribute('aria-label', `Choose ${key} color`);
+      picker.value = ColorUtils.toPickerColor(values[key]) || '#000000';
       const input = document.createElement('input');
       input.type = 'text';
+      input.className = 'monitor-color-value';
       input.autocomplete = 'off';
-      input.placeholder = '#RRGGBB';
+      input.placeholder = 'CSS color (hex, rgb, hsl, name…)';
       input.value = values[key] || '';
       input.dataset[dataAttribute] = key;
-      label.appendChild(input);
+      picker.addEventListener('input', () => {
+        input.value = picker.value;
+      });
+      input.addEventListener('input', () => {
+        const pickerColor = ColorUtils.toPickerColor(input.value);
+        if (pickerColor) picker.value = pickerColor;
+      });
+      controls.append(picker, input);
+      label.appendChild(controls);
       container.appendChild(label);
     });
   }

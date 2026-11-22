@@ -2862,11 +2862,19 @@ body.lms-app.monitor-page .admin-panel[hidden] {
   display: none !important;
 }
 
+body.lms-app.monitor-page .admin-panel {
+  display: grid;
+  gap: 20px;
+}
+
+body.lms-app.monitor-page .monitor-stats {
+  gap: 16px;
+}
+
 body.lms-app.monitor-page .monitor-quick-links {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  margin-top: 16px;
+  gap: 16px;
 }
 
 body.lms-app.monitor-page .monitor-quick-link {
@@ -2960,6 +2968,25 @@ body.lms-app.monitor-page .monitor-settings-section .monitor-card-heading {
 
 body.lms-app.monitor-page .monitor-theme-fields {
   margin-bottom: 0;
+}
+
+body.lms-app.monitor-page .monitor-color-control {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+}
+
+body.lms-app.monitor-page .monitor-theme-fields .monitor-color-picker {
+  width: 48px;
+  height: 40px;
+  min-height: 40px;
+  padding: 3px;
+  cursor: pointer;
+}
+
+body.lms-app.monitor-page .monitor-theme-fields .monitor-color-value {
+  min-width: 0;
 }
 
 body.lms-app.monitor-page .monitor-actions {
