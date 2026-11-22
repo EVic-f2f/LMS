@@ -1318,7 +1318,7 @@ body.lms-app .topbar {
   left: var(--sidebar-collapsed);
   height: var(--topbar-height);
   padding: 0 24px;
-  background: #050505;
+  background: var(--secondary);
   border: 0;
   color: #ffffff;
 }
@@ -1343,7 +1343,7 @@ body.lms-app .sidebar {
   width: var(--sidebar-collapsed);
   padding: 12px 6px;
   gap: 8px;
-  background: #050505;
+  background: var(--primary);
   box-shadow: none;
 }
 
@@ -1395,7 +1395,7 @@ body.lms-app .sidebar button {
 
 body.lms-app .sidebar button:hover,
 body.lms-app .sidebar button.active {
-  background: #242424;
+  background: var(--secondary);
   color: #ffffff;
 }
 
@@ -1413,6 +1413,13 @@ body.lms-app .sidebar button img {
 body.lms-app .sidebar button .btn-icon {
   font-size: 0.68rem;
   font-weight: 800;
+}
+
+body.lms-app .sidebar button .nav-icon,
+body.lms-app .sidebar button .btn-icon.icon-mask {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
 }
 
 body.lms-app .sidebar button .btn-text {
@@ -1434,7 +1441,7 @@ body.lms-app .sidebar a.tablinks {
 
 body.lms-app .sidebar a.tablinks:hover,
 body.lms-app .sidebar a.tablinks.active {
-  background: #242424;
+  background: var(--secondary);
   color: #ffffff;
 }
 
@@ -1468,9 +1475,93 @@ body.lms-app .monitor-nav-icon {
   height: 20px;
   flex: 0 0 auto;
   place-items: center;
-  color: #e4e0df;
+  color: var(--primary);
   font-size: 0.68rem;
   font-weight: 800;
+}
+
+body.lms-app .icon-mask {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  color: var(--primary);
+}
+
+body.lms-app .sidebar .icon-mask {
+  color: var(--accent);
+}
+
+body.lms-app .icon-mask::before {
+  display: block;
+  width: 20px;
+  height: 20px;
+  background-color: currentColor;
+  content: "";
+  -webkit-mask-image: var(--icon-source);
+  -webkit-mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-size: contain;
+  mask-image: var(--icon-source);
+  mask-position: center;
+  mask-repeat: no-repeat;
+  mask-size: contain;
+}
+
+body.lms-app .icon-home {
+  --icon-source: url("/Storage/Image_assets/home-smile-angle-svgrepo-com.svg");
+}
+
+body.lms-app .icon-chevron-right {
+  --icon-source: url("/Storage/Image_assets/chevron-right-dot-svgrepo-com.svg");
+}
+
+body.lms-app .icon-classes {
+  --icon-source: url("/Storage/Image_assets/book-bookmark-svgrepo-com.svg");
+}
+
+body.lms-app .icon-alert {
+  --icon-source: url("/Storage/Image_assets/alert-2-svgrepo-com.svg");
+}
+
+body.lms-app .icon-settings {
+  --icon-source: url("/Storage/Image_assets/account-settings-svgrepo-com.svg");
+}
+
+body.lms-app .icon-school {
+  --icon-source: url("/Storage/Image_assets/school-svgrepo-com.svg");
+}
+
+body.lms-app .icon-news {
+  --icon-source: url("/Storage/Image_assets/news-paper-svgrepo-com.svg");
+}
+
+body.lms-app .icon-requests {
+  --icon-source: url("/Storage/Image_assets/inbox-alt-svgrepo-com.svg");
+}
+
+body.lms-app .icon-admin {
+  --icon-source: url("/Storage/Image_assets/shield-check-svgrepo-com.svg");
+}
+
+body.lms-app .icon-account,
+body.lms-app .icon-students {
+  --icon-source: url("/Storage/Image_assets/user-alt-1-svgrepo-com.svg");
+}
+
+body.lms-app #save-status .save-status-icon {
+  margin-right: 6px;
+  vertical-align: middle;
+  color: var(--success);
+}
+
+body.lms-app #save-status .save-status-icon::before {
+  width: 14px;
+  height: 14px;
+}
+
+body.lms-app .sidebar .tablinks.active .icon-mask,
+body.lms-app .sidebar .tablinks:hover .icon-mask {
+  color: #ffffff;
 }
 
 body.lms-app .sidebar button.bottom-tab {
@@ -1801,6 +1892,14 @@ body.lms-app .quick-link-arrow {
   font-size: 1.05rem;
 }
 
+body.lms-app .quick-link-arrow.icon-mask {
+  color: var(--primary);
+}
+
+body.lms-app .quick-link:hover .quick-link-arrow.icon-mask {
+  color: var(--accent);
+}
+
 body.lms-app .loading-state,
 body.lms-app .empty-state {
   display: grid;
@@ -1827,6 +1926,27 @@ body.lms-app .empty-state-icon {
   background: #f2eaea;
   color: #4a3b3b;
   font-weight: 800;
+}
+
+body.lms-app .overview-icon.icon-mask,
+body.lms-app .quick-link-icon.icon-mask,
+body.lms-app .class-mark.icon-mask,
+body.lms-app .empty-state-icon.icon-mask,
+body.lms-app .dashboard-avatar.icon-mask,
+body.lms-app .account-avatar.icon-mask {
+  color: var(--primary);
+}
+
+body.lms-app .dashboard-avatar.icon-mask::before,
+body.lms-app .account-avatar.icon-mask::before {
+  width: 26px;
+  height: 26px;
+}
+
+body.lms-app .quick-link-arrow.icon-mask::before,
+body.lms-app .text-action .icon-mask::before {
+  width: 16px;
+  height: 16px;
 }
 
 body.lms-app .empty-state-error {
@@ -2732,8 +2852,165 @@ body.lms-app .monitor-editor > .app-primary-button {
   margin-top: 14px;
 }
 
+body.lms-app.monitor-page .monitor-nav-icon,
+body.lms-app.monitor-page .sidebar .icon-mask {
+  color: var(--vic-accent);
+}
+
+body.lms-app.monitor-page .sidebar a.tablinks[hidden],
+body.lms-app.monitor-page .admin-panel[hidden] {
+  display: none !important;
+}
+
+body.lms-app.monitor-page .monitor-quick-links {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+body.lms-app.monitor-page .monitor-quick-link {
+  display: grid;
+  min-height: 132px;
+  align-content: start;
+  gap: 9px;
+  padding: 18px;
+  border: 1px solid var(--app-line);
+  border-radius: 15px;
+  background: #ffffff;
+  color: var(--app-ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+body.lms-app.monitor-page .monitor-quick-link:hover,
+body.lms-app.monitor-page .monitor-quick-link:focus-visible {
+  border-color: var(--vic-primary);
+  outline: 3px solid rgba(181, 42, 47, 0.18);
+}
+
+body.lms-app.monitor-page .monitor-quick-link strong {
+  font-size: 0.95rem;
+}
+
+body.lms-app.monitor-page .monitor-quick-link > span:last-child {
+  color: var(--app-muted);
+  font-size: 0.76rem;
+  line-height: 1.5;
+}
+
+body.lms-app.monitor-page .monitor-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+body.lms-app.monitor-page .monitor-field {
+  display: grid;
+  gap: 7px;
+  color: #4a4543;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+body.lms-app.monitor-page .monitor-field small {
+  margin-left: 5px;
+  color: var(--app-muted);
+  font-weight: 400;
+}
+
+body.lms-app.monitor-page .monitor-field-wide {
+  grid-column: 1 / -1;
+}
+
+body.lms-app.monitor-page .monitor-field input,
+body.lms-app.monitor-page .monitor-field textarea {
+  width: 100%;
+  min-height: 42px;
+  padding: 10px 12px;
+  border: 1px solid #e0dcda;
+  border-radius: 9px;
+  background: #ffffff;
+  color: var(--app-ink);
+  font: inherit;
+  font-size: 0.82rem;
+}
+
+body.lms-app.monitor-page .monitor-field textarea {
+  min-height: 125px;
+  resize: vertical;
+  line-height: 1.55;
+}
+
+body.lms-app.monitor-page .monitor-field input:focus,
+body.lms-app.monitor-page .monitor-field textarea:focus {
+  border-color: var(--vic-primary);
+  outline: 3px solid rgba(181, 42, 47, 0.18);
+}
+
+body.lms-app.monitor-page .monitor-settings-section {
+  margin-top: 26px;
+  padding-top: 22px;
+  border-top: 1px solid var(--app-line);
+}
+
+body.lms-app.monitor-page .monitor-settings-section .monitor-card-heading {
+  margin-bottom: 14px;
+}
+
+body.lms-app.monitor-page .monitor-theme-fields {
+  margin-bottom: 0;
+}
+
+body.lms-app.monitor-page .monitor-actions {
+  margin-top: 22px;
+}
+
+body.lms-app.monitor-page .monitor-danger-card {
+  margin-top: 16px;
+  border-color: #efcaca;
+}
+
+body.lms-app.monitor-page .app-danger-button {
+  min-height: 40px;
+  padding: 10px 15px;
+  border: 1px solid #a93c3c;
+  border-radius: 9px;
+  background: #a93c3c;
+  color: #ffffff;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+body.lms-app.monitor-page .app-danger-button:hover {
+  background: #862d2d;
+}
+
+body.lms-app.monitor-page .app-danger-button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
 body.vic-home-page .topbar,
-body.public-vic .topbar {
+body.public-vic .topbar,
+body.lms-app.monitor-page .topbar,
+body.lms-app.account-standalone .topbar {
+  background: var(--vic-primary);
+}
+
+body.lms-app.monitor-page .sidebar,
+body.lms-app.account-standalone .sidebar {
+  background: var(--vic-secondary);
+}
+
+body.lms-app.monitor-page .sidebar button:hover,
+body.lms-app.monitor-page .sidebar button.active,
+body.lms-app.monitor-page .sidebar a.tablinks:hover,
+body.lms-app.monitor-page .sidebar a.tablinks.active,
+body.lms-app.account-standalone .sidebar a.tablinks:hover,
+body.lms-app.account-standalone .sidebar a.tablinks.active {
   background: var(--vic-primary);
 }
 
@@ -2839,6 +3116,18 @@ body.public-vic .topbar {
     grid-template-columns: 1fr;
   }
 
+  body.lms-app.monitor-page .monitor-quick-links {
+    grid-template-columns: 1fr;
+  }
+
+  body.lms-app.monitor-page .monitor-settings-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  body.lms-app.monitor-page .monitor-field-wide {
+    grid-column: auto;
+  }
+
   body.lms-app .hd-access-badge {
     align-self: flex-start;
   }
@@ -2847,6 +3136,11 @@ body.public-vic .topbar {
 body.lms-app .school-updates-panel {
   margin-top: 24px;
   padding: clamp(18px, 3vw, 28px);
+}
+
+body.lms-app #school-updates-title .icon-mask {
+  margin-right: 8px;
+  vertical-align: middle;
 }
 
 body.lms-app .school-updates-list {
@@ -2881,6 +3175,9 @@ body.lms-app .school-update-heading {
 }
 
 body.lms-app .school-update-category {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   color: var(--app-ink);
   font-size: 0.66rem;
   font-weight: 800;
@@ -2888,8 +3185,17 @@ body.lms-app .school-update-category {
   text-transform: uppercase;
 }
 
+body.lms-app .school-update-category .icon-mask::before {
+  width: 14px;
+  height: 14px;
+}
+
 body.lms-app .school-update-category.is-alert {
   color: #9c3e3e;
+}
+
+body.lms-app .school-update-category.is-alert .icon-mask {
+  color: var(--warning);
 }
 
 body.lms-app .school-update-card h3 {

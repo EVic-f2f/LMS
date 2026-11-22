@@ -330,7 +330,7 @@ const App = {
 
     const topbarMeta = document.querySelector('.topbar-meta');
     if (topbarMeta) {
-      topbarMeta.textContent = this.currentAccount ? `VIC systems · ${this.currentAccount.status}` : 'VIC systems';
+      topbarMeta.textContent = this.currentAccount ? this.currentAccount.status : '';
     }
     const headingUser = document.getElementById('page-heading-user');
     if (headingUser && this.currentAccount) {
@@ -348,10 +348,8 @@ const App = {
     const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
     const welcome = document.getElementById('home-welcome');
     const intro = document.getElementById('home-intro');
-    const avatar = document.getElementById('home-avatar');
     if (welcome) welcome.textContent = `${greeting}, ${firstName}`;
     if (intro) intro.textContent = `${this.currentSchoolName || this.config.schoolName || 'Your school'} · ${currentUser.status || 'Member'} workspace`;
-    if (avatar) avatar.textContent = firstName.slice(0, 1).toUpperCase();
 
     try {
       const classes = await Classes.apiRequest('/api/classes');
@@ -373,22 +371,22 @@ const App = {
       if (!myClasses.length) {
         classesContainer.innerHTML = `
           <div class="empty-state">
-            <span class="empty-state-icon">C</span>
+            <span class="empty-state-icon icon-mask icon-classes" aria-hidden="true"></span>
             <strong>No classes to show yet</strong>
             <p>Your classes will appear here when you join one or create a class.</p>
-            <button type="button" class="text-action" onclick="UI.openTab(null, 'Classes')">Explore classes <span aria-hidden="true">→</span></button>
+            <button type="button" class="text-action" onclick="UI.openTab(null, 'Classes')">Explore classes <span class="icon-mask icon-chevron-right" aria-hidden="true"></span></button>
           </div>`;
         return;
       }
 
       classesContainer.innerHTML = myClasses.slice(0, 4).map((classInfo) => `
         <button type="button" class="home-class-card" onclick="Classes.openClassDetail('${Classes.escapeHtml(classInfo.id)}')">
-          <span class="class-mark">${Classes.escapeHtml(String(classInfo.name || 'C').slice(0, 1).toUpperCase())}</span>
+          <span class="class-mark icon-mask icon-classes" aria-hidden="true"></span>
           <span class="home-class-copy">
             <strong>${Classes.escapeHtml(classInfo.name || 'Untitled class')}</strong>
             <small>${Classes.escapeHtml(classInfo.subject || 'Class workspace')} · ${Number(classInfo.studentCount || 0)} students</small>
           </span>
-          <span class="quick-link-arrow" aria-hidden="true">→</span>
+          <span class="quick-link-arrow icon-mask icon-chevron-right" aria-hidden="true"></span>
         </button>`).join('');
     } catch (error) {
       console.error('Unable to load home dashboard classes:', error);
@@ -396,7 +394,7 @@ const App = {
         <div class="empty-state empty-state-error">
           <strong>Classes could not be loaded</strong>
           <p>${Classes.escapeHtml(error.message || 'Check your connection and try again.')}</p>
-          <button type="button" class="text-action" onclick="App.renderHomeDashboard()">Try again <span aria-hidden="true">→</span></button>
+          <button type="button" class="text-action" onclick="App.renderHomeDashboard()">Try again <span class="icon-mask icon-chevron-right" aria-hidden="true"></span></button>
         </div>`;
     }
   },
@@ -478,9 +476,9 @@ const App = {
 
     try {
       await API.saveStudents(students);
-      UI.showSaveStatus("✓ Saved to browser and server", true);
+      UI.showSaveStatus("Saved to browser and server", true);
     } catch (error) {
-      UI.showSaveStatus("✓ Saved to browser (server unavailable)", true);
+      UI.showSaveStatus("Saved to browser (server unavailable)", true);
     }
   },
 

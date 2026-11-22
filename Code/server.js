@@ -62,6 +62,97 @@ async function requireAdministrator(req) {
     return user;
 }
 
+function getAdminSchoolConfiguration(schoolRow, settingsRow, themeRow) {
+    const storedConfig = schoolRow.config_json && typeof schoolRow.config_json === "object"
+        && !Array.isArray(schoolRow.config_json)
+        ? schoolRow.config_json
+        : {};
+    const storedTheme = storedConfig.theme && typeof storedConfig.theme === "object"
+        && !Array.isArray(storedConfig.theme)
+        ? storedConfig.theme
+        : {};
+    const themeColumns = {
+        primary: "primary_color",
+        secondary: "secondary_color",
+        accent: "accent_color",
+        success: "success_color",
+        warning: "warning_color",
+        background: "background_color",
+        text: "text_color"
+    };
+    const normalizedTheme = {};
+    Object.entries(themeColumns).forEach(([key, column]) => {
+        const value = themeRow?.[column];
+        if (typeof value === "string" && value.trim()) normalizedTheme[key] = value;
+    });
+    const location = typeof settingsRow?.location === "string" && settingsRow.location.trim()
+        ? settingsRow.location
+        : storedConfig.location;
+    const gradeFields = Array.isArray(settingsRow?.grade_fields) && settingsRow.grade_fields.length
+        ? settingsRow.grade_fields
+        : storedConfig.gradeFields;
+    const apiEndpoint = typeof settingsRow?.api_endpoint === "string" && settingsRow.api_endpoint.trim()
+        ? settingsRow.api_endpoint
+        : storedConfig.apiEndpoint;
+
+    return {
+        school: {
+            id: schoolRow.id,
+            name: schoolRow.name,
+            logo_url: schoolRow.logo_url
+        },
+        config_json: {
+            ...storedConfig,
+            schoolName: schoolRow.name || storedConfig.schoolName || "",
+            location: location ?? "",
+            gradeFields: gradeFields ?? [],
+            apiEndpoint: apiEndpoint ?? "",
+            theme: { ...storedTheme, ...normalizedTheme }
+        }
+    };
+}
+
+async function saveSchoolConfiguration(schoolId, configJson) {
+    const theme = configJson.theme && typeof configJson.theme === "object" && !Array.isArray(configJson.theme)
+        ? configJson.theme
+        : {};
+    const normalizedSettings = {
+        school_id: schoolId,
+        location: typeof configJson.location === "string" ? configJson.location.trim() || null : null,
+        grade_fields: Array.isArray(configJson.gradeFields)
+            ? configJson.gradeFields.filter((field) => typeof field === "string").map((field) => field.trim()).filter(Boolean)
+            : [],
+        api_endpoint: typeof configJson.apiEndpoint === "string" ? configJson.apiEndpoint.trim() || null : null
+    };
+    const normalizedTheme = {
+        school_id: schoolId,
+        primary_color: typeof theme.primary === "string" ? theme.primary.trim() || null : null,
+        secondary_color: typeof theme.secondary === "string" ? theme.secondary.trim() || null : null,
+        accent_color: typeof theme.accent === "string" ? theme.accent.trim() || null : null,
+        success_color: typeof theme.success === "string" ? theme.success.trim() || null : null,
+        warning_color: typeof theme.warning === "string" ? theme.warning.trim() || null : null,
+        background_color: typeof theme.background === "string" ? theme.background.trim() || null : null,
+        text_color: typeof theme.text === "string" ? theme.text.trim() || null : null
+    };
+    const { error: settingsError } = await supabase
+        .from("school_settings")
+        .upsert(normalizedSettings, { onConflict: "school_id" });
+    if (settingsError) throw settingsError;
+    const { error: themeError } = await supabase
+        .from("school_themes")
+        .upsert(normalizedTheme, { onConflict: "school_id" });
+    if (themeError) throw themeError;
+
+    const schoolUpdates = { config_json: configJson };
+    const schoolName = typeof configJson.schoolName === "string" ? configJson.schoolName.trim() : "";
+    if (schoolName) schoolUpdates.name = schoolName;
+    const { error: schoolError } = await supabase
+        .from("schools")
+        .update(schoolUpdates)
+        .eq("id", schoolId);
+    if (schoolError) throw schoolError;
+}
+
 async function initializeDatabase() {
     // Only ensure local folders exist. Users are stored in Supabase now.
     fs.mkdirSync(storageFolder, { recursive: true });
@@ -542,7 +633,8 @@ function sendStaticFile(res, filePath) {
             ".png": "image/png",
             ".jpg": "image/jpeg",
             ".jpeg": "image/jpeg",
-            ".gif": "image/gif"
+            ".gif": "image/gif",
+            ".svg": "image/svg+xml"
         }[ext] || "application/octet-stream";
 
         const headers = { "Content-Type": contentType };
@@ -1728,48 +1820,7 @@ function handleRequest(req, res) {
                         return;
                     }
 
-                    const theme = config_json.theme && typeof config_json.theme === "object" && !Array.isArray(config_json.theme)
-                        ? config_json.theme
-                        : {};
-                    const normalizedSettings = {
-                        school_id: schoolId,
-                        location: typeof config_json.location === "string" ? config_json.location.trim() || null : null,
-                        grade_fields: Array.isArray(config_json.gradeFields)
-                            ? config_json.gradeFields.filter((field) => typeof field === "string").map((field) => field.trim()).filter(Boolean)
-                            : [],
-                        api_endpoint: typeof config_json.apiEndpoint === "string" ? config_json.apiEndpoint.trim() || null : null
-                    };
-                    const normalizedTheme = {
-                        school_id: schoolId,
-                        primary_color: typeof theme.primary === "string" ? theme.primary.trim() || null : null,
-                        secondary_color: typeof theme.secondary === "string" ? theme.secondary.trim() || null : null,
-                        accent_color: typeof theme.accent === "string" ? theme.accent.trim() || null : null,
-                        success_color: typeof theme.success === "string" ? theme.success.trim() || null : null,
-                        warning_color: typeof theme.warning === "string" ? theme.warning.trim() || null : null,
-                        background_color: typeof theme.background === "string" ? theme.background.trim() || null : null,
-                        text_color: typeof theme.text === "string" ? theme.text.trim() || null : null
-                    };
-                    const { error: settingsUpsertError } = await supabase
-                        .from("school_settings")
-                        .upsert(normalizedSettings, { onConflict: "school_id" });
-                    if (settingsUpsertError) throw settingsUpsertError;
-                    const { error: themeUpsertError } = await supabase
-                        .from("school_themes")
-                        .upsert(normalizedTheme, { onConflict: "school_id" });
-                    if (themeUpsertError) throw themeUpsertError;
-
-                    const schoolUpdates = { config_json };
-                    const schoolName = typeof config_json.schoolName === "string"
-                        ? config_json.schoolName.trim()
-                        : "";
-                    if (schoolName) schoolUpdates.name = schoolName;
-
-                    const { error: upErr } = await supabase
-                        .from("schools")
-                        .update(schoolUpdates)
-                        .eq("id", schoolId);
-
-                    if (upErr) throw upErr;
+                    await saveSchoolConfiguration(schoolId, config_json);
 
                     sendJson(res, 200, { success: true });
                 } catch (err) {
@@ -1893,6 +1944,54 @@ function handleRequest(req, res) {
     }
 
 
+    if (url.pathname === "/api/admin/schools/config") {
+        setCorsHeaders(res);
+        if (req.method === "OPTIONS") {
+            res.writeHead(204);
+            res.end();
+            return;
+        }
+        if (req.method !== "GET") {
+            sendJson(res, 405, { error: "Method not allowed" });
+            return;
+        }
+
+        (async () => {
+            requireSupabase();
+            await requireAdministrator(req);
+            const schoolId = String(url.searchParams.get("schoolId") || "").trim();
+            if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(schoolId)) {
+                throw httpError("A valid school id is required.", 400);
+            }
+            const { data: school, error: schoolError } = await supabase
+                .from("schools")
+                .select("id, name, logo_url, config_json")
+                .eq("id", schoolId)
+                .maybeSingle();
+            if (schoolError) throw schoolError;
+            if (!school) throw httpError("School not found.", 404);
+            const [
+                { data: settings, error: settingsError },
+                { data: theme, error: themeError }
+            ] = await Promise.all([
+                supabase.from("school_settings")
+                    .select("location, grade_fields, api_endpoint")
+                    .eq("school_id", schoolId)
+                    .maybeSingle(),
+                supabase.from("school_themes")
+                    .select("primary_color, secondary_color, accent_color, success_color, warning_color, background_color, text_color")
+                    .eq("school_id", schoolId)
+                    .maybeSingle()
+            ]);
+            if (settingsError) throw settingsError;
+            if (themeError) throw themeError;
+            sendJson(res, 200, { success: true, ...getAdminSchoolConfiguration(school, settings, theme) });
+        })().catch((error) => {
+            sendJson(res, error.statusCode || 500, { success: false, error: error.message });
+        });
+        return;
+    }
+
     if (url.pathname === "/api/admin/search") {
         setCorsHeaders(res);
         if (req.method === "OPTIONS") {
@@ -1954,7 +2053,8 @@ function handleRequest(req, res) {
         return;
     }
 
-    if (url.pathname === "/api/admin/users/update" || url.pathname === "/api/admin/users/delete" || url.pathname === "/api/admin/schools/update") {
+    if (url.pathname === "/api/admin/users/update" || url.pathname === "/api/admin/users/delete"
+        || url.pathname === "/api/admin/schools/update" || url.pathname === "/api/admin/schools/delete") {
         setCorsHeaders(res);
         if (req.method === "OPTIONS") {
             res.writeHead(204);
@@ -2005,14 +2105,38 @@ function handleRequest(req, res) {
                 if (!target) throw httpError("User account not found.", 404);
                 const { error: deleteError } = await supabase.from("users").delete().eq("id", target.id);
                 if (deleteError) throw deleteError;
+            } else if (url.pathname === "/api/admin/schools/delete") {
+                await requireAdministrator(req);
+                const schoolId = String(payload.schoolId || "").trim();
+                const confirmName = String(payload.confirmName || "").trim();
+                if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(schoolId)) {
+                    throw httpError("A valid school id is required.", 400);
+                }
+                const { data: school, error: schoolError } = await supabase
+                    .from("schools")
+                    .select("id, name")
+                    .eq("id", schoolId)
+                    .maybeSingle();
+                if (schoolError) throw schoolError;
+                if (!school) throw httpError("School not found.", 404);
+                if (!confirmName || confirmName !== String(school.name || "").trim()) {
+                    throw httpError("The school name confirmation did not match.", 400);
+                }
+                const { error: deleteError } = await supabase.from("schools").delete().eq("id", schoolId);
+                if (deleteError) throw deleteError;
             } else {
                 await requireAdministrator(req);
                 const schoolId = String(payload.schoolId || "").trim();
-                if (!schoolId || !payload.config_json || typeof payload.config_json !== "object") {
-                    throw httpError("School id and configuration are required.", 400);
+                if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(schoolId)) {
+                    throw httpError("A valid school id is required.", 400);
                 }
-                const { error: updateError } = await supabase.from("schools").update({ config_json: payload.config_json }).eq("id", schoolId);
-                if (updateError) throw updateError;
+                if (!payload.config_json || typeof payload.config_json !== "object") {
+                    throw httpError("School configuration is required.", 400);
+                }
+                if (Array.isArray(payload.config_json)) {
+                    throw httpError("School configuration must be an object.", 400);
+                }
+                await saveSchoolConfiguration(schoolId, payload.config_json);
             }
 
             sendJson(res, 200, { success: true });

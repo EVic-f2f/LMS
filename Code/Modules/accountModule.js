@@ -86,13 +86,12 @@ const Account = {
     const fullName = this.escapeHtml(this.account.name || "LMS member");
     const email = this.escapeHtml(this.account.email || "");
     const role = this.escapeHtml(this.account.status || this.defaultStatus);
-    const initials = this.escapeHtml(String(this.account.name || this.account.email || "U").trim().slice(0, 1).toUpperCase());
     const signedIn = this.escapeHtml(this.formatLastSignedIn(this.account.lastSignedIn));
     const profileCard = document.createElement("section");
     profileCard.className = "account-profile-card";
     profileCard.innerHTML = `
       <div class="account-profile-heading">
-        <div class="account-avatar" aria-hidden="true">${initials}</div>
+        <div class="account-avatar icon-mask icon-account" aria-hidden="true"></div>
         <div class="account-profile-name">
           <div class="section-eyebrow">YOUR PROFILE</div>
           <h2>${fullName}</h2>
@@ -121,6 +120,11 @@ const Account = {
     workspaceLink.href = "main.html";
     workspaceLink.textContent = "Open school workspace";
     actionButtons.appendChild(workspaceLink);
+    const homeLink = document.createElement("a");
+    homeLink.className = "app-secondary-button";
+    homeLink.href = "vic-home.html";
+    homeLink.textContent = "Open VIC Home";
+    actionButtons.appendChild(homeLink);
     const signOut = document.createElement("button");
     signOut.type = "button";
     signOut.className = "app-primary-button";

@@ -132,7 +132,15 @@ const UI = {
 
   showSaveStatus(message, isSuccess) {
     const status = document.getElementById("save-status");
-    status.textContent = message;
+    status.replaceChildren();
+    if (isSuccess) {
+      const icon = document.createElement("span");
+      icon.className = "icon-mask icon-admin save-status-icon";
+      icon.setAttribute("aria-hidden", "true");
+      status.append(icon, document.createTextNode(message));
+    } else {
+      status.textContent = message;
+    }
     status.style.color = isSuccess ? "#2a7" : "#c00";
     status.style.display = "inline";
     setTimeout(() => {

@@ -15,7 +15,7 @@
 
 <header class="topbar">
   <div class="topbar-brand" id="topbar-school-name">Your School</div>
-  <div class="topbar-meta" id="topbar-user-label">VIC systems</div>
+  <div class="topbar-meta" id="topbar-user-label"></div>
   <div class="lms-clock" aria-label="Local date and time">
     <time id="lms-clock-time">--:--:--</time>
     <span id="lms-clock-date"></span>
@@ -31,23 +31,23 @@
     </div>
   </div>
   <button class="tablinks active" data-tab="Home" aria-label="Home" title="Home" onclick="UI.openTab(event, 'Home')">
-    <img src="/Storage/Image_assets/home(trans).png" alt="Home Icon">
+    <span class="nav-icon icon-mask icon-home" aria-hidden="true"></span>
     <span class="btn-text">Home</span>
   </button>
   <button class="tablinks" data-tab="Classes" aria-label="Classes" title="Classes" onclick="UI.openTab(event, 'Classes')">
-    <img src="/Storage/Image_assets/book(trans).png" alt="Classes Icon">
+    <span class="nav-icon icon-mask icon-classes" aria-hidden="true"></span>
     <span class="btn-text">Classes</span>
   </button>
   <button class="tablinks" id="hd-tab-btn" data-tab="HD" aria-label="Administration" title="Administration" onclick="UI.openTab(event, 'HD')" style="display:none;">
-    <span class="btn-icon">HD</span>
+    <span class="btn-icon icon-mask icon-admin" aria-hidden="true"></span>
     <span class="btn-text">Administration</span>
   </button>
   <button class="tablinks bottom-tab" data-tab="Settings" aria-label="Settings" title="Settings" onclick="UI.openTab(event, 'Settings')">
-    <img src="/Storage/Image_assets/settings.png" alt="Settings Icon">
+    <span class="nav-icon icon-mask icon-settings" aria-hidden="true"></span>
     <span class="btn-text">Settings</span>
   </button>
   <button class="tablinks" data-tab="Account" aria-label="Account" title="Account" onclick="UI.openTab(event, 'Account')">
-    <img src="/Storage/Image_assets/account.png" alt="Account Icon">
+    <span class="nav-icon icon-mask icon-account" aria-hidden="true"></span>
     <span class="btn-text">Account</span>
   </button>
 </nav>
@@ -68,20 +68,20 @@
         <h2 id="home-welcome">Welcome to Your School</h2>
         <p id="home-intro">A clear view of your classes and school workspace.</p>
       </div>
-      <div class="dashboard-avatar" id="home-avatar" aria-hidden="true">V</div>
+      <div class="dashboard-avatar icon-mask icon-account" id="home-avatar" aria-hidden="true"></div>
     </section>
 
     <section class="dashboard-stats" id="home-stats" aria-label="School overview">
       <article class="overview-card">
-        <span class="overview-icon">C</span>
+        <span class="overview-icon icon-mask icon-classes" aria-hidden="true"></span>
         <div><span class="overview-label">MY CLASSES</span><strong id="home-class-count">—</strong></div>
       </article>
       <article class="overview-card">
-        <span class="overview-icon">S</span>
+        <span class="overview-icon icon-mask icon-students" aria-hidden="true"></span>
         <div><span class="overview-label">STUDENTS</span><strong id="home-student-count">—</strong></div>
       </article>
       <article class="overview-card">
-        <span class="overview-icon">R</span>
+        <span class="overview-icon icon-mask icon-requests" aria-hidden="true"></span>
         <div><span class="overview-label" id="home-request-label">PENDING REQUESTS</span><strong id="home-request-count">—</strong></div>
       </article>
     </section>
@@ -93,7 +93,7 @@
             <div class="section-eyebrow">LEARNING</div>
             <h2>My classes</h2>
           </div>
-          <button type="button" class="text-action" onclick="UI.openTab(null, 'Classes')">View all <span aria-hidden="true">→</span></button>
+          <button type="button" class="text-action" onclick="UI.openTab(null, 'Classes')">View all <span class="icon-mask icon-chevron-right" aria-hidden="true"></span></button>
         </div>
         <div id="home-classes" class="home-classes-list">
           <div class="loading-state">Loading your classes…</div>
@@ -103,9 +103,9 @@
       <aside class="home-section-card home-quick-card">
         <div class="section-eyebrow">SHORTCUTS</div>
         <h2>Quick access</h2>
-        <button type="button" class="quick-link" onclick="UI.openTab(null, 'Classes')"><span class="quick-link-icon">C</span><span><strong>Browse classes</strong><small>Open your class workspace</small></span><span class="quick-link-arrow">→</span></button>
-        <button type="button" class="quick-link" onclick="UI.openTab(null, 'Account')"><span class="quick-link-icon">A</span><span><strong>My account</strong><small>Review your profile and preferences</small></span><span class="quick-link-arrow">→</span></button>
-        <button type="button" class="quick-link" data-quick-settings onclick="UI.openTab(null, 'Settings')"><span class="quick-link-icon">S</span><span><strong>School settings</strong><small>Manage your school's workspace</small></span><span class="quick-link-arrow">→</span></button>
+        <button type="button" class="quick-link" onclick="UI.openTab(null, 'Classes')"><span class="quick-link-icon icon-mask icon-classes" aria-hidden="true"></span><span><strong>Browse classes</strong><small>Open your class workspace</small></span><span class="quick-link-arrow icon-mask icon-chevron-right" aria-hidden="true"></span></button>
+        <button type="button" class="quick-link" onclick="UI.openTab(null, 'Account')"><span class="quick-link-icon icon-mask icon-account" aria-hidden="true"></span><span><strong>My account</strong><small>Review your profile and preferences</small></span><span class="quick-link-arrow icon-mask icon-chevron-right" aria-hidden="true"></span></button>
+        <button type="button" class="quick-link" data-quick-settings onclick="UI.openTab(null, 'Settings')"><span class="quick-link-icon icon-mask icon-settings" aria-hidden="true"></span><span><strong>School settings</strong><small>Manage your school's workspace</small></span><span class="quick-link-arrow icon-mask icon-chevron-right" aria-hidden="true"></span></button>
       </aside>
     </section>
 
@@ -113,7 +113,7 @@
       <div class="section-heading">
         <div>
           <div class="section-eyebrow">YOUR SCHOOL</div>
-          <h2 id="school-updates-title">School news &amp; updates</h2>
+          <h2 id="school-updates-title"><span class="icon-mask icon-news" aria-hidden="true"></span>School news &amp; updates</h2>
         </div>
       </div>
       <div id="school-updates-editor"></div>

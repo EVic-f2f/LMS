@@ -170,7 +170,7 @@ const HD = {
       if (requestCount) requestCount.textContent = String(requests.length);
 
       if (!requests.length) {
-        container.innerHTML = '<div class="hd-empty-state"><span class="empty-state-icon">✓</span><h3>You’re all caught up</h3><p>There are no pending join requests for your school.</p></div>';
+        container.innerHTML = '<div class="hd-empty-state"><span class="empty-state-icon icon-mask icon-admin" aria-hidden="true"></span><h3>You’re all caught up</h3><p>There are no pending join requests for your school.</p></div>';
         return;
       }
 

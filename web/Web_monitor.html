@@ -3,349 +3,139 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Administration | VIC systems</title>
+  <title>Web Administrator</title>
   <link rel="stylesheet" href="/styles/main.css">
   <script src="/Code/Modules/vicThemeModule.js"></script>
 </head>
 <body class="lms-app monitor-page">
   <header class="topbar">
-    <div class="topbar-brand">VIC SYSTEMS / PLATFORM ADMIN</div>
-    <div class="topbar-meta">GLOBAL ADMINISTRATION</div>
+    <div class="topbar-brand">WEB ADMINISTRATOR</div>
+    <div class="topbar-meta" id="admin-identity">Checking access…</div>
   </header>
-  <nav class="sidebar" aria-label="Administration navigation">
+  <nav class="sidebar" aria-label="Web Administrator navigation">
     <div class="sidebar-header">
-      <div class="sidebar-logo"><img src="/Storage/Image_assets/logo.jpg" alt="VIC systems"></div>
-      <div class="sidebar-header-text"><div class="sidebar-title">VIC systems</div><div class="sidebar-status">Platform administration</div></div>
+      <div class="sidebar-logo"><img src="/Storage/Image_assets/logo.jpg" alt="VIC"></div>
+      <div class="sidebar-header-text">
+        <div class="sidebar-title">Web Administrator</div>
+        <div class="sidebar-status">Platform management</div>
+      </div>
     </div>
-    <a class="tablinks" href="main.html" aria-label="School workspace" title="School workspace"><span class="monitor-nav-icon">S</span><span class="btn-text">School workspace</span></a>
-    <a class="tablinks active" href="Web_monitor.html" aria-label="Administration" title="Administration"><span class="monitor-nav-icon">A</span><span class="btn-text">Administration</span></a>
-    <a class="tablinks bottom-tab" href="vic-home.html" aria-label="VIC Home" title="VIC Home"><span class="monitor-nav-icon">V</span><span class="btn-text">VIC Home</span></a>
+    <a class="tablinks active" href="#overview" data-admin-tab="overview" aria-current="page" title="Overview">
+      <span class="monitor-nav-icon icon-mask icon-home" aria-hidden="true"></span><span class="btn-text">Overview</span>
+    </a>
+    <a class="tablinks" href="#schools" data-admin-tab="schools" title="Schools">
+      <span class="monitor-nav-icon icon-mask icon-school" aria-hidden="true"></span><span class="btn-text">Schools</span>
+    </a>
+    <a class="tablinks" href="#school-settings" data-admin-tab="school-settings" id="school-settings-nav" title="School settings" hidden>
+      <span class="monitor-nav-icon icon-mask icon-settings" aria-hidden="true"></span><span class="btn-text">School settings</span>
+    </a>
+    <a class="tablinks" href="#vic-theme" data-admin-tab="vic-theme" title="VIC theme">
+      <span class="monitor-nav-icon icon-mask icon-news" aria-hidden="true"></span><span class="btn-text">VIC theme</span>
+    </a>
+    <a class="tablinks" href="#users" data-admin-tab="users" title="Users">
+      <span class="monitor-nav-icon icon-mask icon-account" aria-hidden="true"></span><span class="btn-text">Users</span>
+    </a>
+    <a class="tablinks bottom-tab" href="main.html" title="School workspace">
+      <span class="monitor-nav-icon icon-mask icon-school" aria-hidden="true"></span><span class="btn-text">School workspace</span>
+    </a>
+    <a class="tablinks bottom-tab" href="vic-home.html" title="VIC Home">
+      <span class="monitor-nav-icon icon-mask icon-home" aria-hidden="true"></span><span class="btn-text">VIC Home</span>
+    </a>
   </nav>
 
   <main class="main monitor-main">
     <div class="page-heading">
-      <div><div class="page-eyebrow">VIC SYSTEMS / PLATFORM</div><h1>Administration</h1></div>
-      <div class="page-heading-user" id="admin-identity"></div>
+      <div><div class="page-eyebrow">PLATFORM MANAGEMENT</div><h1 id="admin-page-title">Overview</h1></div>
     </div>
-    <section class="monitor-welcome">
-      <div><div class="section-eyebrow">GLOBAL OVERVIEW</div><h2>Platform administration</h2><p>Manage schools, review user accounts, and update the VIC systems theme.</p></div>
-      <span class="monitor-access-badge">Global administrator</span>
-    </section>
-    <section class="monitor-stats" aria-label="Platform overview">
-      <article><span>SCHOOLS</span><strong id="school-count">—</strong><small>Connected workspaces</small></article>
-      <article><span>USER ACCOUNTS</span><strong id="user-count">—</strong><small>Accounts in the platform</small></article>
-      <article><span>SEARCH</span><strong id="search-count">—</strong><small id="search-summary">Search all schools and users</small></article>
-    </section>
+    <p class="monitor-status" id="monitor-status" role="status" aria-live="polite">Checking administrator access…</p>
 
-    <section class="monitor-card">
-      <div class="monitor-card-heading">
-        <div><div class="section-eyebrow">DIRECTORY</div><h2>Find a school or user</h2></div>
+    <section class="admin-panel" data-admin-panel="overview">
+      <div class="monitor-welcome">
+        <div><div class="section-eyebrow">GLOBAL OVERVIEW</div><h2>Platform administration</h2><p>Manage schools, school settings, users, and the VIC Home theme from one workspace.</p></div>
+        <span class="monitor-access-badge">Global administrator</span>
       </div>
-      <div class="monitor-toolbar">
-        <label class="monitor-search"><span class="sr-only">Search schools and users</span><input id="monitor-search" type="search" placeholder="Search schools, IDs, names, or emails"></label>
-        <button class="app-primary-button" id="monitor-search-button" type="button">Search</button>
+      <div class="monitor-stats" aria-label="Platform overview">
+        <article><span>SCHOOLS</span><strong id="school-count">—</strong><small>Workspaces matching the current search</small></article>
+        <article><span>USER ACCOUNTS</span><strong id="user-count">—</strong><small>Accounts matching the current search</small></article>
+        <article><span>RESULTS</span><strong id="search-count">—</strong><small id="search-summary">All schools and users</small></article>
       </div>
-      <p class="monitor-status" id="monitor-status" role="status" aria-live="polite">Checking administrator access…</p>
-    </section>
-
-    <section class="monitor-card">
-      <div class="monitor-card-heading">
-        <div><div class="section-eyebrow">WORKSPACES</div><h2>Schools</h2><p>Choose a school to review its theme settings.</p></div>
-      </div>
-      <div class="monitor-table-wrap"><table class="monitor-table"><thead><tr><th>School</th><th>School ID</th><th>Creator / linked user</th><th>Action</th></tr></thead><tbody id="school-results"><tr><td colspan="4">Loading schools…</td></tr></tbody></table></div>
-      <div class="theme-editor monitor-editor" id="theme-editor">
-        <div class="monitor-card-heading"><div><div class="section-eyebrow">SCHOOL BRANDING</div><h3 id="theme-editor-title">Edit school theme</h3></div><button class="app-secondary-button" id="close-theme-editor" type="button">Close</button></div>
-        <div class="theme-fields" id="theme-fields"></div>
-        <button class="app-primary-button" id="save-theme" type="button">Save school theme</button>
+      <div class="monitor-quick-links" aria-label="Administration sections">
+        <button class="monitor-quick-link" type="button" data-go-tab="schools"><span class="section-eyebrow">WORKSPACES</span><strong>Manage schools</strong><span>Review school details and open settings.</span></button>
+        <button class="monitor-quick-link" type="button" data-go-tab="users"><span class="section-eyebrow">ACCOUNTS</span><strong>Manage users</strong><span>Update platform roles or remove accounts.</span></button>
+        <button class="monitor-quick-link" type="button" data-go-tab="vic-theme"><span class="section-eyebrow">BRANDING</span><strong>VIC Home theme</strong><span>Update public VIC colors.</span></button>
       </div>
     </section>
 
-    <section class="monitor-card">
-      <div class="monitor-card-heading">
-        <div><div class="section-eyebrow">BRAND</div><h2>VIC systems theme</h2><p>Controls the public VIC pages, separate from individual school themes.</p></div>
-      </div>
-      <div class="theme-fields monitor-theme-fields" id="vic-theme-fields"></div>
-      <div class="monitor-actions"><button class="app-primary-button" id="save-vic-theme" type="button">Save VIC theme</button></div>
+    <section class="admin-panel" data-admin-panel="schools" hidden>
+      <section class="monitor-card">
+        <div class="monitor-card-heading">
+          <div><div class="section-eyebrow">WORKSPACES</div><h2>Schools</h2><p>Search the directory, then open a school's settings in this workspace.</p></div>
+        </div>
+        <div class="monitor-toolbar">
+          <label class="monitor-search"><span class="sr-only">Search schools and users</span><input id="monitor-search" type="search" placeholder="Search schools, IDs, names, or emails"></label>
+          <button class="app-primary-button" id="monitor-search-button" type="button">Search</button>
+        </div>
+        <div class="monitor-table-wrap">
+          <table class="monitor-table">
+            <thead><tr><th>School</th><th>School ID</th><th>Creator / linked user</th><th>Action</th></tr></thead>
+            <tbody id="school-results"><tr><td colspan="4">Loading schools…</td></tr></tbody>
+          </table>
+        </div>
+      </section>
     </section>
 
-    <section class="monitor-card">
-      <div class="monitor-card-heading">
-        <div><div class="section-eyebrow">DIRECTORY</div><h2>User accounts</h2><p>Global administrators can update roles and remove accounts.</p></div>
-      </div>
-      <div class="monitor-table-wrap"><table class="monitor-table"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>School</th><th>Action</th></tr></thead><tbody id="user-results"><tr><td colspan="5">Loading users…</td></tr></tbody></table></div>
+    <section class="admin-panel" data-admin-panel="school-settings" hidden>
+      <section class="monitor-card">
+        <div class="monitor-card-heading">
+          <div><div class="section-eyebrow">SCHOOL CONFIGURATION</div><h2 id="school-settings-title">Select a school</h2><p>These controls mirror the school workspace settings without leaving Web Administrator.</p></div>
+          <button class="app-secondary-button" type="button" data-go-tab="schools">Back to schools</button>
+        </div>
+        <div class="monitor-settings-grid">
+          <label class="monitor-field"><span>School name</span><input id="school-name" type="text" autocomplete="off"></label>
+          <label class="monitor-field"><span>Location</span><input id="school-location" type="text" autocomplete="off"></label>
+          <label class="monitor-field monitor-field-wide"><span>Student API endpoint</span><input id="school-api-endpoint" type="url" autocomplete="url" placeholder="https://"></label>
+          <label class="monitor-field monitor-field-wide"><span>Grade fields <small>One per line</small></span><textarea id="school-grade-fields" rows="5"></textarea></label>
+        </div>
+        <div class="monitor-settings-section">
+          <div class="monitor-card-heading"><div><div class="section-eyebrow">SCHOOL BRANDING</div><h3>Theme colors</h3><p>These colors apply to this school's LMS workspace.</p></div></div>
+          <div class="theme-fields monitor-theme-fields" id="school-theme-fields"></div>
+        </div>
+        <div class="monitor-actions">
+          <button class="app-primary-button" id="save-school-settings" type="button">Save school settings</button>
+        </div>
+      </section>
+      <section class="monitor-card monitor-danger-card">
+        <div class="monitor-card-heading">
+          <div><div class="section-eyebrow">DANGER ZONE</div><h3>Delete this school</h3><p>This permanently removes the school. Related records are removed only where the database is configured to cascade; blocked deletions will return an error.</p></div>
+        </div>
+        <button class="app-danger-button" id="delete-school" type="button">Delete school</button>
+      </section>
+    </section>
+
+    <section class="admin-panel" data-admin-panel="vic-theme" hidden>
+      <section class="monitor-card">
+        <div class="monitor-card-heading">
+          <div><div class="section-eyebrow">BRAND</div><h2>VIC Home theme</h2><p>Controls public VIC pages and the Web Administrator shell, separately from school themes.</p></div>
+        </div>
+        <div class="theme-fields monitor-theme-fields" id="vic-theme-fields"></div>
+        <div class="monitor-actions"><button class="app-primary-button" id="save-vic-theme" type="button">Save VIC theme</button></div>
+      </section>
+    </section>
+
+    <section class="admin-panel" data-admin-panel="users" hidden>
+      <section class="monitor-card">
+        <div class="monitor-card-heading">
+          <div><div class="section-eyebrow">ACCOUNTS</div><h2>User accounts</h2><p>Global administrators can update roles and remove accounts.</p></div>
+        </div>
+        <div class="monitor-table-wrap">
+          <table class="monitor-table">
+            <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>School</th><th>Action</th></tr></thead>
+            <tbody id="user-results"><tr><td colspan="5">Loading users…</td></tr></tbody>
+          </table>
+        </div>
+      </section>
     </section>
   </main>
-
-  <script>
-    (() => {
-      const admin = JSON.parse(localStorage.getItem('lmsCurrentUser') || 'null');
-      const token = localStorage.getItem('lmsSessionToken');
-      const status = document.getElementById('monitor-status');
-      const query = document.getElementById('monitor-search');
-      const schoolsBody = document.getElementById('school-results');
-      const usersBody = document.getElementById('user-results');
-      const editor = document.getElementById('theme-editor');
-      const fields = document.getElementById('theme-fields');
-      const vicFields = document.getElementById('vic-theme-fields');
-      const roleOptions = ['Student', 'Teacher', 'School Administrator', 'Administrator', 'Admin', 'Guest'];
-      let selectedSchool = null;
-      let themeConfig = null;
-      const themeKeys = ['primary', 'secondary', 'accent', 'success', 'warning', 'background', 'text'];
-      const sidebar = document.querySelector('.sidebar');
-      sidebar.addEventListener('mouseenter', () => document.body.classList.add('sidebar-expanded'));
-      sidebar.addEventListener('mouseleave', () => document.body.classList.remove('sidebar-expanded'));
-
-      function button(label, className = 'app-secondary-button') {
-        const element = document.createElement('button');
-        element.type = 'button';
-        element.textContent = label;
-        element.className = className;
-        return element;
-      }
-
-      async function request(path, options = {}) {
-        const response = await fetch(path, {
-          ...options,
-          headers: {
-            ...options.headers,
-            ...(options.body ? { 'Content-Type': 'application/json' } : {}),
-            ...(token ? { Authorization: `Bearer ${token}` } : {})
-          }
-        });
-        const json = await response.json().catch(() => ({}));
-        if (!response.ok || json.success === false) throw new Error(json.error || 'Request failed.');
-        return json;
-      }
-
-      function setStatus(message, isError = false) {
-        status.textContent = message;
-        status.classList.toggle('is-error', isError);
-        status.classList.toggle('is-success', !isError);
-      }
-
-      function updateSummary(schools, users) {
-        document.getElementById('school-count').textContent = String(schools.length);
-        document.getElementById('user-count').textContent = String(users.length);
-        document.getElementById('search-count').textContent = String(schools.length + users.length);
-        document.getElementById('search-summary').textContent = query.value.trim()
-          ? 'Matching results'
-          : 'Search all schools and users';
-      }
-
-      function showDirectoryMessage(message) {
-        [[schoolsBody, 4], [usersBody, 5]].forEach(([body, columnCount]) => {
-          const row = document.createElement('tr');
-          const cell = document.createElement('td');
-          cell.colSpan = columnCount;
-          cell.textContent = message;
-          row.appendChild(cell);
-          body.replaceChildren(row);
-        });
-      }
-
-      async function loadVicTheme() {
-        const response = await fetch('/api/vic-theme');
-        if (!response.ok) throw new Error('Could not load the VIC systems theme.');
-        const theme = await response.json();
-        vicFields.replaceChildren();
-        ['primary', 'secondary', 'accent', 'background', 'surface', 'text'].forEach((key) => {
-          const label = document.createElement('label');
-          label.textContent = key;
-          const input = document.createElement('input');
-          input.type = 'text';
-          input.value = theme[key] || '';
-          input.dataset.vicThemeKey = key;
-          label.appendChild(input);
-          vicFields.appendChild(label);
-        });
-      }
-
-      function renderUsers(users) {
-        usersBody.replaceChildren();
-        if (!users.length) {
-          const row = document.createElement('tr');
-          const cell = document.createElement('td');
-          cell.colSpan = 5;
-          cell.textContent = 'No users match this search.';
-          row.appendChild(cell);
-          usersBody.appendChild(row);
-          return;
-        }
-
-        users.forEach((user) => {
-          const row = document.createElement('tr');
-          const nameCell = document.createElement('td');
-          nameCell.textContent = user.name || 'Unnamed user';
-          row.appendChild(nameCell);
-          const emailCell = document.createElement('td');
-          emailCell.textContent = user.email || '';
-          row.appendChild(emailCell);
-          const roleCell = document.createElement('td');
-          const select = document.createElement('select');
-          roleOptions.forEach((role) => select.appendChild(new Option(role, role, false, role === user.status)));
-          select.disabled = user.email === admin.email;
-          select.addEventListener('change', async () => {
-            const previousRole = user.status;
-            select.disabled = true;
-            try {
-              await request('/api/admin/users/update', {
-                method: 'POST',
-                body: JSON.stringify({ email: user.email, status: select.value })
-              });
-              user.status = select.value;
-              setStatus(`Role updated for ${user.email}.`);
-            } catch (error) {
-              select.value = previousRole;
-              setStatus(error.message, true);
-            } finally {
-              select.disabled = user.email === admin.email;
-            }
-          });
-          roleCell.appendChild(select);
-          row.appendChild(roleCell);
-          const schoolCell = document.createElement('td');
-          schoolCell.textContent = user.school_id || 'Unassigned';
-          row.appendChild(schoolCell);
-          const actionCell = document.createElement('td');
-          const removeButton = button('Remove');
-          removeButton.disabled = user.email === admin.email;
-          removeButton.addEventListener('click', async () => {
-            if (!confirm(`Remove ${user.email}? This cannot be undone.`)) return;
-            removeButton.disabled = true;
-            try {
-              await request('/api/admin/users/delete', {
-                method: 'POST',
-                body: JSON.stringify({ email: user.email })
-              });
-              setStatus(`Account removed: ${user.email}.`);
-              await load();
-            } catch (error) {
-              removeButton.disabled = false;
-              setStatus(error.message, true);
-            }
-          });
-          actionCell.appendChild(removeButton);
-          row.appendChild(actionCell);
-          usersBody.appendChild(row);
-        });
-      }
-
-      function renderSchools(schools) {
-        schoolsBody.replaceChildren();
-        if (!schools.length) {
-          const row = document.createElement('tr');
-          const cell = document.createElement('td');
-          cell.colSpan = 4;
-          cell.textContent = 'No schools match this search.';
-          row.appendChild(cell);
-          schoolsBody.appendChild(row);
-          return;
-        }
-        schools.forEach((school) => {
-          const row = document.createElement('tr');
-          [school.name, school.id, school.creator ? `${school.creator.name || ''} (${school.creator.email || ''})` : 'No linked creator']
-            .forEach((value) => {
-              const cell = document.createElement('td');
-              cell.textContent = value || '';
-              row.appendChild(cell);
-            });
-          const actionCell = document.createElement('td');
-          const editButton = button('Edit theme');
-          editButton.addEventListener('click', () => openEditor(school));
-          actionCell.appendChild(editButton);
-          row.appendChild(actionCell);
-          row.addEventListener('click', (event) => {
-            if (event.target !== editButton) openEditor(school);
-          });
-          row.tabIndex = 0;
-          row.addEventListener('keydown', (event) => {
-            if (event.key === 'Enter' || event.key === ' ') openEditor(school);
-          });
-          schoolsBody.appendChild(row);
-        });
-      }
-
-      function openEditor(school) {
-        selectedSchool = school;
-        themeConfig = { ...(school.config_json || {}) };
-        document.getElementById('theme-editor-title').textContent = `Edit theme: ${school.name}`;
-        fields.replaceChildren();
-        const theme = themeConfig.theme || {};
-        themeKeys.forEach((key) => {
-          const label = document.createElement('label');
-          label.textContent = key;
-          const input = document.createElement('input');
-          input.type = 'text';
-          input.value = theme[key] || '';
-          input.dataset.themeKey = key;
-          label.appendChild(input);
-          fields.appendChild(label);
-        });
-        editor.classList.add('open');
-        editor.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-      }
-
-      async function load() {
-        if (!admin?.email || !['Administrator', 'Admin'].includes(admin.status) || !token) {
-          const message = 'Sign in with a global administrator account to open this page.';
-          setStatus(message, true);
-          showDirectoryMessage(message);
-          return;
-        }
-        document.getElementById('admin-identity').textContent = admin.name || admin.email;
-        try {
-          const data = await request(`/api/admin/search?q=${encodeURIComponent(query.value.trim())}`);
-          renderSchools(data.schools || []);
-          renderUsers(data.users || []);
-          updateSummary(data.schools || [], data.users || []);
-          setStatus(`${data.schools.length} schools and ${data.users.length} user accounts found.`);
-        } catch (error) {
-          setStatus(error.message, true);
-          showDirectoryMessage(error.message);
-        }
-      }
-
-      document.getElementById('monitor-search-button').addEventListener('click', load);
-      query.addEventListener('keydown', (event) => {
-        if (event.key === 'Enter') load();
-      });
-      document.getElementById('close-theme-editor').addEventListener('click', () => editor.classList.remove('open'));
-      document.getElementById('save-theme').addEventListener('click', async () => {
-        if (!selectedSchool) return;
-        const theme = {};
-        fields.querySelectorAll('[data-theme-key]').forEach((input) => {
-          if (input.value.trim()) theme[input.dataset.themeKey] = input.value.trim();
-        });
-        try {
-          await request('/api/admin/schools/update', {
-            method: 'POST',
-            body: JSON.stringify({ schoolId: selectedSchool.id, config_json: { ...themeConfig, theme } })
-          });
-          setStatus(`Theme saved for ${selectedSchool.name}.`);
-          await load();
-        } catch (error) {
-          setStatus(error.message, true);
-        }
-      });
-      document.getElementById('save-vic-theme').addEventListener('click', async () => {
-        const theme = {};
-        vicFields.querySelectorAll('[data-vic-theme-key]').forEach((input) => {
-          if (input.value.trim()) theme[input.dataset.vicThemeKey] = input.value.trim();
-        });
-        try {
-          await request('/api/admin/vic-theme', {
-            method: 'POST',
-            body: JSON.stringify({ theme })
-          });
-          setStatus('VIC systems theme saved.');
-        } catch (error) {
-          setStatus(error.message, true);
-        }
-      });
-
-      loadVicTheme().catch((error) => setStatus(error.message, true));
-      load();
-    })();
-  </script>
+  <script src="/Code/Modules/webAdminModule.js"></script>
 </body>
 </html>

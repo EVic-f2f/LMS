@@ -81,7 +81,15 @@ const SchoolUpdates = {
       heading.className = "school-update-heading";
       const category = document.createElement("span");
       category.className = `school-update-category is-${announcement.category}`;
-      category.textContent = announcement.category;
+      if (announcement.category === "news" || announcement.category === "alert") {
+        const categoryIcon = document.createElement("span");
+        categoryIcon.className = `icon-mask ${announcement.category === "alert" ? "icon-alert" : "icon-news"}`;
+        categoryIcon.setAttribute("aria-hidden", "true");
+        category.appendChild(categoryIcon);
+      }
+      const categoryLabel = document.createElement("span");
+      categoryLabel.textContent = announcement.category;
+      category.appendChild(categoryLabel);
       const published = document.createElement("time");
       published.dateTime = announcement.created_at || "";
       published.textContent = this.formatDate(announcement.created_at);

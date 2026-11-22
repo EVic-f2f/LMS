@@ -4,7 +4,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const page = window.location.pathname.split("/").pop();
 
   if (currentUser && (page === "sign-in.html" || page === "sign-up.html")) {
-    window.location.href = "index.html";
+    window.location.href = "vic-home.html";
     return;
   }
 
@@ -23,7 +23,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       try {
         const user = await Auth.login(email, password, remember);
         Auth.saveCurrentUser(user);
-        window.location.href = "index.html";
+        window.location.href = "vic-home.html";
       } catch (err) {
         message.textContent = err.message;
         message.style.color = "#c0392b";
