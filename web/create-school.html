@@ -73,7 +73,8 @@
 
       window.addEventListener('DOMContentLoaded', async () => {
         const email = await getCurrentEmail();
-        if (!email) {
+        const sessionToken = localStorage.getItem('lmsSessionToken');
+        if (!email || !sessionToken) {
           setMessage('Sign in first to create a school.', true);
           const btn = form?.querySelector('button[type="submit"]');
           if (btn) {
@@ -91,7 +92,8 @@
         setMessage('');
 
         const currentUser = JSON.parse(localStorage.getItem('lmsCurrentUser') || 'null');
-        if (!currentUser?.email) {
+        const sessionToken = localStorage.getItem('lmsSessionToken');
+        if (!currentUser?.email || !sessionToken) {
           setMessage('You must be signed in to create a school.', true);
           return;
         }
@@ -128,11 +130,20 @@
 
           const res = await fetch(url, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${sessionToken}`
+            },
             body: JSON.stringify(payload)
           });
 
           const json = await res.json().catch(() => ({}));
+          if (res.status === 401) {
+            localStorage.removeItem('lmsCurrentUser');
+            localStorage.removeItem('lmsSessionToken');
+            window.location.replace('sign-in.html');
+            return;
+          }
           if (!res.ok) {
             throw new Error(json?.error || 'Failed to create school');
           }

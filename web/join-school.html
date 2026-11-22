@@ -106,7 +106,9 @@
             return;
           }
           if (!response.ok || !result.success) throw new Error(result.error || 'Request failed');
-          message.textContent = result.joined ? 'You joined the school.' : 'Join request sent.';
+          message.textContent = result.alreadyMember
+            ? 'You are already a member of this school.'
+            : result.joined ? 'You joined the school.' : 'Join request sent.';
           message.style.color = '#27804a';
         } catch (error) { message.textContent = error.message; message.style.color = '#c0392b'; }
       });

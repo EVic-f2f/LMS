@@ -1452,21 +1452,23 @@ function handleRequest(req, res) {
                         return;
                     }
                     const isGlobalAdministrator = ["Administrator", "Admin"].includes(String(user.status));
-                    const { data: activeMemberships, error: membershipsError } = await supabase
-                        .from("school_memberships")
-                        .select("school_id")
-                        .eq("user_id", user.id)
-                        .eq("status", "active");
-                    if (membershipsError) throw membershipsError;
-                    if ((user.school_id || activeMemberships?.length) && !isGlobalAdministrator) {
-                        sendJson(res, 400, { success: false, error: "You already belong to a school" });
-                        return;
-                    }
-
                     const { data: school, error: schoolError } = await supabase.from("schools").select("id, config_json").eq("id", schoolId).maybeSingle();
                     if (schoolError) throw schoolError;
                     if (!school) {
                         sendJson(res, 404, { success: false, error: "School not found" });
+                        return;
+                    }
+
+                    const { data: existingMembership, error: existingMembershipError } = await supabase
+                        .from("school_memberships")
+                        .select("school_id")
+                        .eq("user_id", user.id)
+                        .eq("school_id", school.id)
+                        .eq("status", "active")
+                        .maybeSingle();
+                    if (existingMembershipError) throw existingMembershipError;
+                    if (existingMembership || String(user.school_id || "") === String(school.id)) {
+                        sendJson(res, 200, { success: true, joined: true, alreadyMember: true, school_id: school.id });
                         return;
                     }
 
@@ -1626,18 +1628,6 @@ function handleRequest(req, res) {
                     if (!requester) throw new Error("Requesting user not found");
                     const membershipRole = getSchoolMembershipRole(requester.status);
                     if (!membershipRole) throw new Error("Guest accounts cannot join a school");
-                    const requesterIsGlobalAdministrator = ["Administrator", "Admin"].includes(String(requester.status));
-                    if (!requesterIsGlobalAdministrator) {
-                        const { data: existingMemberships, error: existingMembershipsError } = await supabase
-                            .from("school_memberships")
-                            .select("school_id")
-                            .eq("user_id", requester.id)
-                            .eq("status", "active");
-                        if (existingMembershipsError) throw existingMembershipsError;
-                        if ((requester.school_id && String(requester.school_id) !== String(school.id)) || existingMemberships?.some((membership) => String(membership.school_id) !== String(school.id))) {
-                            throw new Error("This user already belongs to another school");
-                        }
-                    }
                     const { error: membershipError } = await supabase
                         .from("school_memberships")
                         .upsert({
@@ -1710,16 +1700,6 @@ function handleRequest(req, res) {
                 if (!schoolName) throw httpError("School name is required.", 400);
                 const membershipRole = getSchoolMembershipRole(user.status);
                 if (!membershipRole) throw httpError("Guest accounts cannot create or join a school.", 403);
-                const { data: memberships, error: membershipsError } = await supabase
-                    .from("school_memberships")
-                    .select("school_id")
-                    .eq("user_id", user.id)
-                    .eq("status", "active")
-                    .limit(1);
-                if (membershipsError) throw membershipsError;
-                if (user.school_id || memberships?.length) {
-                    throw httpError("This account already belongs to a school.", 409);
-                }
 
                 const { data: school, error: createError } = await supabase
                     .from("schools")
@@ -1738,11 +1718,14 @@ function handleRequest(req, res) {
                     });
                 if (membershipError) throw membershipError;
 
-                const { error: updateError } = await supabase
-                    .from("users")
-                    .update({ school_id: school.id })
-                    .eq("id", user.id);
-                if (updateError) throw updateError;
+                if (!user.school_id) {
+                    const { error: updateError } = await supabase
+                        .from("users")
+                        .update({ school_id: school.id })
+                        .eq("id", user.id)
+                        .is("school_id", null);
+                    if (updateError) throw updateError;
+                }
                 return { success: true, school_id: school.id };
             })
             .then((result) => sendJson(res, 201, result))
