@@ -30,6 +30,14 @@ const IntroVideo = {
       : navigating ? 2600 : 4200;
     this.finishTimer = window.setTimeout(() => this.finish(), duration);
 
+    if (document.readyState === "complete") {
+      window.setTimeout(() => this.finish(), navigating ? 350 : 700);
+    } else {
+      window.addEventListener("load", () => {
+        window.setTimeout(() => this.finish(), navigating ? 350 : 700);
+      }, { once: true });
+    }
+
     window.addEventListener("beforeunload", () => {
       sessionStorage.setItem("vic-loading-navigation", "1");
     }, { once: true });
